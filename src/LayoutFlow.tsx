@@ -1,151 +1,171 @@
-import { useMemo, useState } from "react";
-import {
-  ReactFlow,
-  MiniMap,
-  Controls,
-  Background,
-  useNodesState,
-  useEdgesState,
-  type Node,
-  type Edge,
-  Position,
-} from "@xyflow/react";
+import { useMemo, useEffect, useState, useCallback } from "react";
+import { ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import dagre from "@dagrejs/dagre";
 
-const NODE_WIDTH = 172;
-const NODE_HEIGHT = 36;
+import { generateLargeFirstLevel, generateHierarchicalData } from "./utils/dataGenerators";
+import { useViewState } from "./hooks/useViewState";
+import { useSearch } from "./hooks/useSearch";
+import { usePerformance } from "./hooks/usePerformance";
 
-const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+import { ForceView } from "./components/views/ForceView";
+import { ConcentricView } from "./components/views/ConcentricView";
+import { GridView } from "./components/views/GridView";
+import { DagreView } from "./components/views/DagreView";
+import { RadialView } from "./components/views/RadialView";
+import { GroupedView } from "./components/views/GroupedView";
+import { D3CanvasView } from "./components/views/D3CanvasView";
+import { D3ClusterView } from "./components/views/D3ClusterView";
+import { ViewSwitcher } from "./components/controls/ViewSwitcher";
+import { SearchBar } from "./components/controls/SearchBar";
+import { FloatingStats } from "./components/controls/FloatingStats";
+import { ConfigControls } from "./components/controls/ConfigControls";
+import { NodeExplorerControl } from "./components/controls/NodeExplorerControl";
+import { LocalViewControls } from "./components/controls/LocalViewControls";
+import { LocalView } from "./components/views/LocalView";
+import type { GraphConfig } from "./types";
 
-// Generate nodes: 1 root + 150 child nodes
-const generateNodes = (): Node[] => {
-  const nodes: Node[] = [
-    {
-      id: "root",
-      position: { x: 0, y: 0 },
-      data: { label: "Root Node" },
-      style: { background: "#f0f0f0", border: "2px solid #333" },
-    },
-  ];
-
-  // Generate 150 child nodes
-  for (let i = 1; i <= 150; i++) {
-    nodes.push({
-      id: `node-${i}`,
-      position: { x: 0, y: 0 },
-      data: { label: `Node ${i}` },
-    });
-  }
-
-  return nodes;
-};
-
-// Generate edges: connect root to all 150 nodes
-const generateEdges = (): Edge[] => {
-  const edges: Edge[] = [];
-
-  for (let i = 1; i <= 150; i++) {
-    edges.push({
-      id: `edge-root-node-${i}`,
-      source: "root",
-      target: `node-${i}`,
-      type: "smoothstep",
-    });
-  }
-
-  return edges;
-};
-
-const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = "TB") => {
-  const isHorizontal = direction === "LR";
-
-  dagreGraph.setGraph({ rankdir: direction, ranksep: 50, nodesep: 20 });
-
-  nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+function LayoutFlowContent() {
+  const [config, setConfig] = useState<GraphConfig>({
+    nodeCount: 150,
+    maxDepth: 2,
+    childrenPerNode: [],
   });
 
-  edges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target);
-  });
+  const [maxVisibleNodes, setMaxVisibleNodes] = useState(150);
+  const [neighborLevels, setNeighborLevels] = useState(2);
+  const [overviewLayout, setOverviewLayout] = useState<"cluster" | "tree">("cluster");
 
-  dagre.layout(dagreGraph);
+  const { currentView, setCurrentView } = useViewState("force");
 
-  const newNodes = nodes.map((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
-    return {
-      ...node,
-      targetPosition: isHorizontal ? Position.Left : Position.Top,
-      sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
-      position: {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
-        y: nodeWithPosition.y - NODE_HEIGHT / 2,
-      },
-    };
-  });
+  const { nodes, edges } = useMemo(() => {
+    // Use hierarchical data generator for D3 Canvas, D3 Cluster, and Local views to support depth levels
+    if (currentView === "d3canvas" || currentView === "d3cluster" || currentView === "local") {
+      return generateHierarchicalData(config.nodeCount, config.maxDepth, 3);
+    }
+    return generateLargeFirstLevel(config.nodeCount);
+  }, [config.nodeCount, config.maxDepth, currentView]);
 
-  return { nodes: newNodes, edges };
-};
+  const { searchTerm, setSearchTerm, searchResults, matchedNodes, hasMatches } = useSearch(nodes);
 
-function LayoutFlow() {
-  const initialData = useMemo(() => {
-    const initialNodes = generateNodes();
-    const initialEdges = generateEdges();
-    return getLayoutedElements(initialNodes, initialEdges);
+  const { metrics, setElementCounts } = usePerformance();
+
+  useEffect(() => {
+    setElementCounts(nodes.length, edges.length);
+  }, [nodes.length, edges.length, setElementCounts]);
+
+  const handleConfigChange = useCallback((newConfig: GraphConfig) => {
+    setConfig(newConfig);
   }, []);
 
-  const [nodes, , onNodesChange] = useNodesState<Node>(initialData.nodes);
-  const [edges, , onEdgesChange] = useEdgesState<Edge>(initialData.edges);
-  const [showInfo, setShowInfo] = useState(true);
+  const renderView = useMemo(() => {
+    const commonProps = {
+      nodes,
+      edges,
+      searchResults,
+    };
+
+    switch (currentView) {
+      case "force":
+        return <ForceView {...commonProps} />;
+      case "concentric":
+        return <ConcentricView {...commonProps} />;
+      case "grid":
+        return <GridView {...commonProps} />;
+      case "dagre":
+        return <DagreView {...commonProps} />;
+      case "radial":
+        return <RadialView {...commonProps} />;
+      case "grouped":
+        return <GroupedView {...commonProps} />;
+      case "d3canvas":
+        return <D3CanvasView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
+      case "d3cluster":
+        return <D3ClusterView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
+      case "local":
+        return <LocalView {...commonProps} neighborLevels={neighborLevels} overviewLayout={overviewLayout} />;
+      default:
+        return <ForceView {...commonProps} />;
+    }
+  }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout]);
 
   return (
-    <div style={{ width: "100vw", height: "100vh" }}>
-      {showInfo && (
-        <div
-          style={{
-            position: "absolute",
-            top: 10,
-            left: 10,
-            zIndex: 10,
-            background: "white",
-            padding: "10px",
-            borderRadius: "5px",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-          }}
-        >
-          <h3 style={{ margin: "0 0 10px 0" }}>Dagre Layout Example</h3>
-          <p style={{ margin: 0 }}>Root node with 150 children</p>
-          <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#666" }}>
-            Total nodes: {nodes.length} | Total edges: {edges.length}
-          </p>
-          <button
-            onClick={() => setShowInfo(false)}
-            style={{
-              marginTop: "10px",
-              padding: "5px 10px",
-              fontSize: "12px",
-              cursor: "pointer",
-            }}
-          >
-            Hide Info
-          </button>
-        </div>
-      )}
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        fitView
-        attributionPosition="bottom-right"
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+      {/* Top Controls */}
+      <div
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          right: 16,
+          zIndex: 10,
+          display: "flex",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}
       >
-        <MiniMap />
-        <Controls />
-        <Background gap={12} size={1} />
-      </ReactFlow>
+        {/* Center: View Switcher */}
+        <div style={{ pointerEvents: "auto" }}>
+          <ViewSwitcher currentView={currentView} onChangeView={setCurrentView} />
+        </div>
+      </div>
+
+      {/* Left Sidebar: Controls */}
+      <div
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          zIndex: 10,
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+          pointerEvents: "auto",
+          maxWidth: "280px",
+        }}
+      >
+        <ConfigControls config={config} onChange={handleConfigChange} />
+        <SearchBar
+          value={searchTerm}
+          onChange={setSearchTerm}
+          resultCount={hasMatches ? matchedNodes.length : undefined}
+        />
+        {(currentView === "d3canvas" || currentView === "d3cluster") && (
+          <NodeExplorerControl
+            value={maxVisibleNodes}
+            maxValue={config.nodeCount}
+            onChange={setMaxVisibleNodes}
+          />
+        )}
+        {currentView === "local" && (
+          <LocalViewControls
+            neighborLevels={neighborLevels}
+            onChangeNeighborLevels={setNeighborLevels}
+            overviewLayout={overviewLayout}
+            onChangeOverviewLayout={setOverviewLayout}
+          />
+        )}
+      </div>
+
+      {/* Right: FPS Stats */}
+      <FloatingStats
+        metrics={metrics}
+        position="top-right"
+        showFps={true}
+        showNodeCount={true}
+        showEdgeCount={true}
+        showRenderTime={false}
+      />
+
+      {/* Main View Area */}
+      <div style={{ width: "100%", height: "100%" }}>{renderView}</div>
     </div>
   );
 }
 
-export default LayoutFlow;
+export default function LayoutFlow() {
+  return (
+    <ReactFlowProvider>
+      <LayoutFlowContent />
+    </ReactFlowProvider>
+  );
+}
