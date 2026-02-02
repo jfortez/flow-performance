@@ -1,6 +1,12 @@
 import type { Node } from "@xyflow/react";
 
-export type NodeType = "root" | "process" | "task" | "decision" | "action";
+export type NodeType = 
+  | "core"      // Nodo central/principal (antes root)
+  | "categoryA" // Categoría A - Procesos principales
+  | "categoryB" // Categoría B - Sub-procesos
+  | "categoryC" // Categoría C - Tareas específicas
+  | "categoryD" // Categoría D - Acciones atómicas
+  | "endpoint"; // Puntos finales/resultados
 export type NodeStatus = "active" | "pending" | "completed" | "error";
 
 export interface NodeMetadata {
@@ -22,7 +28,7 @@ export interface CustomNode extends Node {
   data: CustomNodeData;
 }
 
-export type ViewType = "force" | "concentric" | "grid" | "dagre" | "radial" | "grouped" | "d3canvas" | "d3cluster" | "local";
+export type ViewType = "force" | "concentric" | "grid" | "dagre" | "radial" | "grouped" | "d3canvas" | "d3cluster" | "d3simple" | "local";
 
 export interface GraphConfig {
   nodeCount: number;

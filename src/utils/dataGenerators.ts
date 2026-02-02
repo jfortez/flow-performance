@@ -1,28 +1,35 @@
 import type { Edge } from "@xyflow/react";
 import type { CustomNode, NodeType, NodeStatus } from "../types";
 
-const NODE_TYPES: NodeType[] = ["root", "process", "task", "decision", "action"];
+// Tipos organizados por nivel jerárquico
+const TYPE_BY_LEVEL: Record<number, NodeType[]> = {
+  0: ["core"],                                    // Solo el nodo raíz
+  1: ["categoryA"],                               // Nivel 1: Categorías principales
+  2: ["categoryB"],                               // Nivel 2: Sub-categorías
+  3: ["categoryC", "categoryD"],                  // Nivel 3: Tareas y acciones
+  4: ["categoryD", "endpoint"],                   // Nivel 4+: Acciones y endpoints
+};
+
 const NODE_STATUSES: NodeStatus[] = ["active", "pending", "completed", "error"];
 
 const getRandomType = (level: number): NodeType => {
-  if (level === 0) return "root";
-  if (level === 1) return "process";
-  if (level === 2) return "decision";
-  return NODE_TYPES[Math.floor(Math.random() * (NODE_TYPES.length - 1)) + 1];
+  const types = TYPE_BY_LEVEL[level] || TYPE_BY_LEVEL[4];
+  return types[Math.floor(Math.random() * types.length)];
 };
 
 const getRandomStatus = (): NodeStatus => {
   return NODE_STATUSES[Math.floor(Math.random() * NODE_STATUSES.length)];
 };
 
-const getNodeStyle = (type: NodeType, status: NodeStatus, isRoot = false) => {
-  // Fondos con color sutil pero visible
+const getNodeStyle = (type: NodeType, status: NodeStatus, isCore = false) => {
+  // Colores distintivos por tipo de categoría
   const typeColors: Record<NodeType, { bg: string; border: string }> = {
-    root: { bg: "#F3E5F5", border: "#7B1FA2" },      // Morado muy claro
-    process: { bg: "#E8EAF6", border: "#3F51B5" },   // Índigo muy claro
-    task: { bg: "#E3F2FD", border: "#1976D2" },      // Azul muy claro
-    decision: { bg: "#E0F2F1", border: "#00796B" },  // Verde muy claro
-    action: { bg: "#FFF3E0", border: "#F57C00" },    // Naranja muy claro
+    core: { bg: "#E1BEE7", border: "#7B1FA2" },         // Morado - Núcleo
+    categoryA: { bg: "#C5CAE9", border: "#3F51B5" },    // Índigo - Categoría A
+    categoryB: { bg: "#BBDEFB", border: "#1976D2" },    // Azul - Categoría B
+    categoryC: { bg: "#B2DFDB", border: "#00796B" },    // Verde - Categoría C
+    categoryD: { bg: "#FFE0B2", border: "#F57C00" },    // Naranja - Categoría D
+    endpoint: { bg: "#C8E6C9", border: "#388E3C" },     // Verde claro - Endpoint
   };
 
   const colorSet = typeColors[type];
@@ -43,8 +50,8 @@ const getNodeStyle = (type: NodeType, status: NodeStatus, isRoot = false) => {
     border: `${borderWidth} solid ${borderColor}`,
     borderRadius: "6px",
     color: "#212121",
-    fontWeight: isRoot ? 700 : 600,
-    fontSize: isRoot ? "13px" : "12px",
+    fontWeight: isCore ? 700 : 600,
+    fontSize: isCore ? "13px" : "12px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -141,29 +148,29 @@ export const generateLargeFirstLevel = (
   const edges: Edge[] = [];
   let nodeCounter = 0;
 
-  const rootNode: CustomNode = {
-    id: "root",
+  const coreNode: CustomNode = {
+    id: "core",
     position: { x: 0, y: 0 },
     data: {
-      label: "Root",
+      label: "Hub Central",
       metadata: {
-        type: "root",
+        type: "core",
         status: "active",
         level: 0,
         createdAt: new Date().toISOString(),
-        description: "Root node",
+        description: "Núcleo principal del sistema",
       },
       isExpanded: true,
       childCount: rootChildrenCount,
     },
     style: {
-      ...getNodeStyle("root", "active", true),
+      ...getNodeStyle("core", "active", true),
       border: "4px solid #7B1FA2",
       boxShadow: "0 4px 12px rgba(123, 31, 162, 0.4)",
     },
   };
 
-  nodes.push(rootNode);
+  nodes.push(coreNode);
 
   for (let i = 0; i < rootChildrenCount; i++) {
     nodeCounter++;
@@ -193,7 +200,7 @@ export const generateLargeFirstLevel = (
 
     edges.push({
       id: `edge-root-${nodeId}`,
-      source: "root",
+      source: "core",
       target: nodeId,
       type: "smoothstep",
     });
@@ -211,29 +218,29 @@ export const generateHierarchicalData = (
   const edges: Edge[] = [];
   let nodeCounter = 0;
 
-  const rootNode: CustomNode = {
-    id: "root",
+  const coreNode: CustomNode = {
+    id: "core",
     position: { x: 0, y: 0 },
     data: {
-      label: "Root",
+      label: "Hub Central",
       metadata: {
-        type: "root",
+        type: "core",
         status: "active",
         level: 0,
         createdAt: new Date().toISOString(),
-        description: "Root node",
+        description: "Núcleo principal del sistema",
       },
       isExpanded: true,
       childCount: rootChildrenCount,
     },
     style: {
-      ...getNodeStyle("root", "active", true),
+      ...getNodeStyle("core", "active", true),
       border: "4px solid #7B1FA2",
       boxShadow: "0 4px 12px rgba(123, 31, 162, 0.4)",
     },
   };
 
-  nodes.push(rootNode);
+  nodes.push(coreNode);
 
   // Create first level children
   const firstLevelNodes: CustomNode[] = [];
@@ -266,7 +273,7 @@ export const generateHierarchicalData = (
 
     edges.push({
       id: `edge-root-${nodeId}`,
-      source: "root",
+      source: "core",
       target: nodeId,
       type: "smoothstep",
     });

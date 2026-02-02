@@ -15,6 +15,7 @@ import { RadialView } from "./components/views/RadialView";
 import { GroupedView } from "./components/views/GroupedView";
 import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
+import { D3SimpleView } from "./components/views/D3SimpleView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
 import { SearchBar } from "./components/controls/SearchBar";
 import { FloatingStats } from "./components/controls/FloatingStats";
@@ -81,6 +82,8 @@ function LayoutFlowContent() {
         return <D3CanvasView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
       case "d3cluster":
         return <D3ClusterView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
+      case "d3simple":
+        return <D3SimpleView {...commonProps} />;
       case "local":
         return <LocalView {...commonProps} neighborLevels={neighborLevels} overviewLayout={overviewLayout} />;
       default:

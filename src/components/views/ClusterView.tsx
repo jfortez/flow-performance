@@ -105,7 +105,7 @@ export const ClusterView = ({
           data: {
             label: cluster.label,
             metadata: {
-              type: "process",
+              type: "categoryA",
               status: "active",
               level: cluster.level,
             },

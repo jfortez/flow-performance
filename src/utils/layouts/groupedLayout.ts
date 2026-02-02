@@ -110,7 +110,7 @@ export const getGroupedLayout = (
             data: {
               label: group.label,
               metadata: {
-                type: "process" as const,
+                type: "categoryA" as const,
                 status: "active" as const,
                 level: 1,
               },
@@ -151,7 +151,7 @@ export const getGroupedLayout = (
         data: {
           label: group.label,
           metadata: {
-            type: "process" as const,
+            type: "categoryA" as const,
             status: "active" as const,
             level: 1,
           },

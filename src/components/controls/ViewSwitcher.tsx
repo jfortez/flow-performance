@@ -6,6 +6,7 @@ interface ViewSwitcherProps {
 }
 
 const views: { id: ViewType; label: string; description: string }[] = [
+  { id: "d3simple", label: "D3 Simple", description: "Simple d3-force layout (50 nodes max)" },
   { id: "d3canvas", label: "D3 Canvas", description: "Canvas rendering with node limiting (PERFORMANCE)" },
   { id: "d3cluster", label: "D3 Cluster", description: "D3 hierarchy cluster layout" },
   { id: "local", label: "Local View", description: "Focus+context with overview and detail panels" },
