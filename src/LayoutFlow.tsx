@@ -39,8 +39,8 @@ function LayoutFlowContent() {
   const { currentView, setCurrentView } = useViewState("force");
 
   const { nodes, edges } = useMemo(() => {
-    // Use hierarchical data generator for D3 Canvas, D3 Cluster, and Local views to support depth levels
-    if (currentView === "d3canvas" || currentView === "d3cluster" || currentView === "local") {
+    // Use hierarchical data generator for D3 views to support multiple depth levels with children
+    if (currentView === "d3canvas" || currentView === "d3cluster" || currentView === "d3simple" || currentView === "local") {
       return generateHierarchicalData(config.nodeCount, config.maxDepth, 3);
     }
     return generateLargeFirstLevel(config.nodeCount);
