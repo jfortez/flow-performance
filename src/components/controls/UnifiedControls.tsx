@@ -46,7 +46,7 @@ export const UnifiedControls = ({
   return (
     <div className={styles.container}>
       <button
-        className={`${styles.configButton} ${isExpanded ? styles.expanded : ""}`}
+        className={styles.configButton}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -54,7 +54,7 @@ export const UnifiedControls = ({
           <path d="M12 1v6m0 6v6m4.22-10.22l4.24-4.24M6.34 6.34L2.1 2.1m17.8 17.8l-4.24-4.24M6.34 17.66l-4.24 4.24M23 12h-6m-6 0H1m20.24-4.24l-4.24 4.24M6.34 6.34l-4.24-4.24" />
         </svg>
         Config ({config.nodeCount} nodes, {config.maxDepth} levels)
-        <svg className={styles.arrow} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg className={`${styles.arrow} ${isExpanded ? styles.arrowExpanded : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
