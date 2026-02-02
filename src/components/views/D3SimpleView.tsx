@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { forceSimulation, forceManyBody, forceCenter, forceLink, forceCollide, forceX, forceY } from "d3-force";
+import {
+  forceSimulation,
+  forceManyBody,
+  forceCenter,
+  forceLink,
+  forceCollide,
+  forceX,
+  forceY,
+} from "d3-force";
 import { zoom, zoomIdentity } from "d3-zoom";
 import { select } from "d3-selection";
 import type { Edge } from "@xyflow/react";
@@ -46,12 +54,12 @@ interface D3SimpleViewProps {
   collisionMode?: CollisionMode;
 }
 
-export const D3SimpleView = ({ 
-  nodes, 
-  edges, 
+export const D3SimpleView = ({
+  nodes,
+  edges,
   searchResults,
   layoutMode = "concentric",
-  collisionMode = "full"
+  collisionMode = "full",
 }: D3SimpleViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -65,18 +73,18 @@ export const D3SimpleView = ({
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {
     const visibleCount = Math.min(nodes.length, 200);
     const visibleNodes = nodes.slice(0, visibleCount);
-    
+
     // Build relationships
     const nodeMap = new Map<string, CustomNode>();
     const parentMap = new Map<string, string>();
     const childrenMap = new Map<string, string[]>();
-    
-    visibleNodes.forEach(node => {
+
+    visibleNodes.forEach((node) => {
       nodeMap.set(node.id, node);
       childrenMap.set(node.id, []);
     });
 
-    edges.forEach(edge => {
+    edges.forEach((edge) => {
       if (nodeMap.has(edge.source) && nodeMap.has(edge.target)) {
         childrenMap.get(edge.source)?.push(edge.target);
         parentMap.set(edge.target, edge.source);
@@ -89,7 +97,7 @@ export const D3SimpleView = ({
 
     // Group by level
     const nodesByLevel = new Map<number, CustomNode[]>();
-    visibleNodes.forEach(node => {
+    visibleNodes.forEach((node) => {
       const level = node.data.metadata.level;
       if (!nodesByLevel.has(level)) nodesByLevel.set(level, []);
       nodesByLevel.get(level)!.push(node);
@@ -100,67 +108,32 @@ export const D3SimpleView = ({
     const nodesByIdMap = new Map<string, ForceNode>();
 
     // Calculate positions based on layout mode
-    const getInitialPosition = (level: number, index: number, levelNodes: CustomNode[]): { x: number; y: number } => {
+    const getInitialPosition = (
+      level: number,
+      index: number,
+      levelNodes: CustomNode[],
+    ): { x: number; y: number } => {
       switch (layoutMode) {
-        case "radial-tree":
-          // Radial tree layout - distributes nodes in a tree-like structure without overlap
+        case "radial-tree": // Simple and guarantees no overlap // Radial tree layout - divides angles evenly like pizza slices
+        {
           if (level === 0) {
             return { x: centerX, y: centerY };
           }
-          
-          // Calculate available angle range for this level based on parent
-          const parentId = parentMap.get(levelNodes[index].id);
-          if (parentId) {
-            const parentNode = nodesByIdMap.get(parentId);
-            
-            if (parentNode) {
-              const siblings = childrenMap.get(parentId) || [];
-              const siblingIndex = siblings.indexOf(levelNodes[index].id);
-              const totalSiblings = siblings.length;
-              
-              // Calculate base angle from parent's position
-              let parentAngle = Math.atan2(parentNode.y - centerY, parentNode.x - centerX);
-              
-              // Calculate angle spread based on level (wider at outer levels)
-              const baseSpread = Math.PI / 4; // 45 degrees base
-              const levelMultiplier = 1 + (level * 0.3); // Increase spread with level
-              const angleSpread = baseSpread * levelMultiplier;
-              
-              // Calculate angle for this node
-              let angleOffset = 0;
-              if (totalSiblings > 1) {
-                angleOffset = (siblingIndex - (totalSiblings - 1) / 2) * (angleSpread / (totalSiblings - 1));
-              }
-              
-              // Ensure we don't go beyond reasonable angles
-              const maxAngleDeviation = Math.PI / 2.5; // Max 72 degrees from parent direction
-              angleOffset = Math.max(-maxAngleDeviation, Math.min(maxAngleDeviation, angleOffset));
-              
-              const angle = parentAngle + angleOffset;
-              
-              // Calculate radius with spacing to prevent overlap
-              // More space for outer levels
-              const baseRadius = 120;
-              const radiusStep = 100;
-              const radius = baseRadius + (level - 1) * radiusStep + (siblingIndex * 20);
-              
-              return {
-                x: centerX + Math.cos(angle) * radius,
-                y: centerY + Math.sin(angle) * radius,
-              };
-            }
-          }
-          // Fallback
-          const fallbackRadius = 150 + (level - 1) * 100;
-          const fallbackAngleStep = (2 * Math.PI) / levelNodes.length;
-          const fallbackAngle = fallbackAngleStep * index;
+
+          // Calculate this level's angle slice (360° divided by node count)
+          const anglePerNode = (2 * Math.PI) / levelNodes.length;
+          const startAngle = anglePerNode * index;
+
+          // Calculate radius with spacing to prevent overlap
+          const radius = 120 + (level - 1) * 100;
+
           return {
-            x: centerX + Math.cos(fallbackAngle) * fallbackRadius,
-            y: centerY + Math.sin(fallbackAngle) * fallbackRadius,
+            x: centerX + Math.cos(startAngle) * radius,
+            y: centerY + Math.sin(startAngle) * radius,
           };
-        
-        case "progressive":
-          // Progressive radial spacing: exponential growth
+        }
+
+        case "progressive": { // Progressive radial spacing: exponential growth
           const progressiveRadius = level === 0 ? 0 : 150 * Math.pow(1.8, level - 1);
           const progressiveAngleStep = (2 * Math.PI) / levelNodes.length;
           const progressiveAngle = progressiveAngleStep * index;
@@ -168,13 +141,13 @@ export const D3SimpleView = ({
             x: centerX + Math.cos(progressiveAngle) * progressiveRadius,
             y: centerY + Math.sin(progressiveAngle) * progressiveRadius,
           };
-        
-        case "hierarchical":
-          // Tree-like hierarchical positioning
+        }
+
+        case "hierarchical": { // Tree-like hierarchical positioning
           if (level === 0) {
             return { x: centerX, y: centerY };
           }
-          
+
           // Calculate angular sector for each parent
           const hierParentId = parentMap.get(levelNodes[index].id);
           if (hierParentId) {
@@ -184,13 +157,18 @@ export const D3SimpleView = ({
               const hierSiblings = childrenMap.get(hierParentId) || [];
               const hierSiblingIndex = hierSiblings.indexOf(levelNodes[index].id);
               const hierTotalSiblings = hierSiblings.length;
-              
-              // Calculate angle based on parent's position and sibling index
-              const hierParentAngle = Math.atan2(hierParentNode.y - centerY, hierParentNode.x - centerX);
+
+              // Calculate base angle from parent's position
+              const hierParentAngle = Math.atan2(
+                hierParentNode.y - centerY,
+                hierParentNode.x - centerX,
+              );
               const hierAngleSpread = Math.PI / 3; // 60 degrees spread
-              const hierAngleOffset = (hierSiblingIndex - (hierTotalSiblings - 1) / 2) * (hierAngleSpread / Math.max(hierTotalSiblings - 1, 1));
+              const hierAngleOffset =
+                (hierSiblingIndex - (hierTotalSiblings - 1) / 2) *
+                (hierAngleSpread / Math.max(hierTotalSiblings - 1, 1));
               const hierAngle = hierParentAngle + hierAngleOffset;
-              
+
               const hierRadius = 180 + (level - 1) * 120;
               return {
                 x: centerX + Math.cos(hierAngle) * hierRadius,
@@ -198,35 +176,37 @@ export const D3SimpleView = ({
               };
             }
           }
-          // Fallback to concentric
-          const hierFallbackRadius = level * 200;
+          // Fallback
+          const hierFallbackRadius = 150 + (level - 1) * 100;
           const hierFallbackAngleStep = (2 * Math.PI) / levelNodes.length;
           const hierFallbackAngle = hierFallbackAngleStep * index;
           return {
             x: centerX + Math.cos(hierFallbackAngle) * hierFallbackRadius,
             y: centerY + Math.sin(hierFallbackAngle) * hierFallbackRadius,
           };
-        
+        }
+
         case "concentric":
-        default:
+        default: {
           // Original concentric circles
-          const radiusStep = 200;
-          const radius = level * radiusStep;
-          const angleStep = (2 * Math.PI) / levelNodes.length;
-          const angle = angleStep * index;
+          const concentricRadiusStep = 200;
+          const concentricRadius = level * concentricRadiusStep;
+          const concentricAngleStep = (2 * Math.PI) / levelNodes.length;
+          const concentricAngle = concentricAngleStep * index;
           return {
-            x: centerX + Math.cos(angle) * radius,
-            y: centerY + Math.sin(angle) * radius,
+            x: centerX + Math.cos(concentricAngle) * concentricRadius,
+            y: centerY + Math.sin(concentricAngle) * concentricRadius,
           };
+        }
       }
     };
 
     nodesByLevel.forEach((levelNodes, level) => {
       levelNodes.forEach((node, index) => {
-        const searchResult = searchResults.find(r => r.node.id === node.id);
+        const searchResult = searchResults.find((r) => r.node.id === node.id);
         const isMatch = searchResult?.matches || false;
-        const style = node.style as Record<string, string> || {};
-        
+        const style = (node.style as Record<string, string>) || {};
+
         const { x: initialX, y: initialY } = getInitialPosition(level, index, levelNodes);
 
         const forceNode: ForceNode = {
@@ -254,7 +234,7 @@ export const D3SimpleView = ({
 
     // Create links
     const linksList: ForceLink[] = [];
-    edges.forEach(edge => {
+    edges.forEach((edge) => {
       if (nodesByIdMap.has(edge.source) && nodesByIdMap.has(edge.target)) {
         linksList.push({
           source: edge.source,
@@ -263,12 +243,12 @@ export const D3SimpleView = ({
       }
     });
 
-    return { 
-      forceNodes: forceNodesList, 
+    return {
+      forceNodes: forceNodesList,
       forceLinks: linksList,
-      nodesById: nodesByIdMap 
+      nodesById: nodesByIdMap,
     };
-  }, [nodes, edges, searchResults, dimensions]);
+  }, [nodes, edges, dimensions.width, dimensions.height, layoutMode, searchResults]);
 
   // Render function
   const render = useCallback(() => {
@@ -291,10 +271,10 @@ export const D3SimpleView = ({
     const centerY = dimensions.height / 2 || 300;
 
     // Draw level circles (rings)
-    const maxLevel = Math.max(...forceNodes.map(n => n.level), 0);
+    const maxLevel = Math.max(...forceNodes.map((n) => n.level), 0);
     for (let level = 1; level <= maxLevel; level++) {
       const radius = level * 120;
-      
+
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(200, 200, 200, ${0.3 - level * 0.04})`;
@@ -318,7 +298,7 @@ export const D3SimpleView = ({
     if (hoveredNode) {
       // Add self
       connectedNodeIds.add(hoveredNode.id);
-      
+
       // Add all ancestors (parent, grandparent, etc.) up to root
       let currentId: string | undefined = hoveredNode.parentId;
       while (currentId) {
@@ -326,12 +306,12 @@ export const D3SimpleView = ({
         const parentNode = nodesById.get(currentId);
         currentId = parentNode?.parentId;
       }
-      
+
       // Add all descendants (children, grandchildren, etc.)
       const addDescendants = (nodeId: string) => {
         const node = nodesById.get(nodeId);
         if (node) {
-          node.childIds.forEach(childId => {
+          node.childIds.forEach((childId) => {
             connectedNodeIds.add(childId);
             addDescendants(childId);
           });
@@ -342,19 +322,15 @@ export const D3SimpleView = ({
 
     // Draw links
     const isHovered = !!hoveredNode;
-    
-    forceLinks.forEach(link => {
-      const source = typeof link.source === "string" 
-        ? nodesById.get(link.source) 
-        : link.source;
-      const target = typeof link.target === "string" 
-        ? nodesById.get(link.target) 
-        : link.target;
+
+    forceLinks.forEach((link) => {
+      const source = typeof link.source === "string" ? nodesById.get(link.source) : link.source;
+      const target = typeof link.target === "string" ? nodesById.get(link.target) : link.target;
 
       if (!source || !target) return;
 
-      const isConnected = isHovered && 
-        (connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id));
+      const isConnected =
+        isHovered && connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id);
 
       if (isHovered && !isConnected) {
         ctx.strokeStyle = "rgba(150, 150, 150, 0.1)";
@@ -381,7 +357,7 @@ export const D3SimpleView = ({
     });
 
     // Draw nodes
-    forceNodes.forEach(node => {
+    forceNodes.forEach((node) => {
       const isNodeHovered = hoveredNode?.id === node.id;
       const isConnected = isHovered && connectedNodeIds.has(node.id);
       const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
@@ -416,16 +392,16 @@ export const D3SimpleView = ({
       // Level badge (always visible on top)
       const badgeRadius = Math.max(7, 9 / transform.k);
       const badgeY = node.y - radius - badgeRadius / 2;
-      
+
       ctx.beginPath();
       ctx.arc(node.x, badgeY, badgeRadius, 0, Math.PI * 2);
       ctx.fillStyle = isConnected ? "#9370DB" : node.level === 0 ? "#7B1FA2" : "#3B82F6";
       ctx.fill();
-      
+
       ctx.lineWidth = 1 / transform.k;
       ctx.strokeStyle = "white";
       ctx.stroke();
-      
+
       ctx.fillStyle = "white";
       ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
       ctx.textAlign = "center";
@@ -437,12 +413,12 @@ export const D3SimpleView = ({
         const countRadius = Math.max(8, 10 / transform.k);
         const countX = node.x + radius * 0.7;
         const countY = node.y - radius * 0.7;
-        
+
         ctx.beginPath();
         ctx.arc(countX, countY, countRadius, 0, Math.PI * 2);
         ctx.fillStyle = "#10B981";
         ctx.fill();
-        
+
         ctx.fillStyle = "white";
         ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
         ctx.textAlign = "center";
@@ -454,24 +430,25 @@ export const D3SimpleView = ({
       if (isNodeHovered || isConnected || transform.k > 0.7) {
         const labelY = node.y + radius + 14 / transform.k;
         const fontSize = Math.max(10, 11 / transform.k);
-        
+
         ctx.font = `${isNodeHovered || isConnected ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        
+
         const metrics = ctx.measureText(node.label);
         const padding = 3 / transform.k;
-        ctx.fillStyle = isNodeHovered || isConnected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.95)";
+        ctx.fillStyle =
+          isNodeHovered || isConnected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.95)";
         ctx.beginPath();
         ctx.roundRect(
           node.x - metrics.width / 2 - padding,
           labelY - padding,
           metrics.width + padding * 2,
           fontSize + padding * 2,
-          3 / transform.k
+          3 / transform.k,
         );
         ctx.fill();
-        
+
         ctx.fillStyle = isConnected ? "#9370DB" : "#1F2937";
         ctx.fillText(node.label, node.x, labelY);
       }
@@ -510,22 +487,11 @@ export const D3SimpleView = ({
     let linkDistance = 150;
     let linkStrength = 0.5;
     let collideRadius = 45;
-    let collideStrength = 1.0;
+    const collideStrength = 1.0;
     let positionStrength = 0.02;
     let centerStrength = 0.02;
 
     switch (layoutMode) {
-      case "radial-tree":
-        // Radial tree mode: strong positioning to maintain tree structure, minimal repulsion
-        chargeStrength = -300;
-        chargeDistanceMax = 600;
-        linkDistance = 100;
-        linkStrength = 0.9;
-        collideRadius = 35;
-        positionStrength = 0.08;
-        centerStrength = 0.05;
-        break;
-      
       case "progressive":
         // Progressive mode: stronger repulsion, weaker positioning
         chargeStrength = -1200;
@@ -536,7 +502,7 @@ export const D3SimpleView = ({
         positionStrength = 0.015;
         centerStrength = 0.01;
         break;
-      
+
       case "hierarchical":
         // Hierarchical mode: weaker repulsion, stronger positioning
         chargeStrength = -500;
@@ -547,7 +513,7 @@ export const D3SimpleView = ({
         positionStrength = 0.04;
         centerStrength = 0.03;
         break;
-      
+
       case "concentric":
       default:
         // Default concentric mode
@@ -556,14 +522,18 @@ export const D3SimpleView = ({
 
     const simulation = forceSimulation(forceNodes as SimulationNodeDatum[])
       .force("charge", forceManyBody().strength(chargeStrength).distanceMax(chargeDistanceMax))
-      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(centerStrength))
-      .force("link", 
+      .force(
+        "center",
+        forceCenter(dimensions.width / 2, dimensions.height / 2).strength(centerStrength),
+      )
+      .force(
+        "link",
         forceLink(forceLinks as SimulationLinkDatum<SimulationNodeDatum>[])
           .id((d: SimulationNodeDatum) => (d as ForceNode).id)
           .distance(linkDistance)
-          .strength(linkStrength)
+          .strength(linkStrength),
       );
-    
+
     // Apply collision based on mode
     if (collisionMode === "full") {
       simulation.force("collide", forceCollide().radius(collideRadius).strength(collideStrength));
@@ -573,10 +543,16 @@ export const D3SimpleView = ({
       simulation.force("collide", forceCollide().radius(25).strength(0.5));
     }
     // "none" mode: no collision force applied
-    
+
     simulation
-      .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(positionStrength))
-      .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(positionStrength))
+      .force(
+        "x",
+        forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(positionStrength),
+      )
+      .force(
+        "y",
+        forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(positionStrength),
+      )
       .alphaDecay(0.015)
       .velocityDecay(0.5);
 
@@ -619,31 +595,34 @@ export const D3SimpleView = ({
   }, []);
 
   // Mouse handlers
-  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-    const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+      const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-    let closest: ForceNode | null = null;
-    let minDist = Infinity;
+      let closest: ForceNode | null = null;
+      let minDist = Infinity;
 
-    forceNodes.forEach((node) => {
-      const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
-      const dx = x - node.x;
-      const dy = y - node.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      forceNodes.forEach((node) => {
+        const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
+        const dx = x - node.x;
+        const dy = y - node.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < radius + 8 && dist < minDist) {
-        minDist = dist;
-        closest = node;
-      }
-    });
+        if (dist < radius + 8 && dist < minDist) {
+          minDist = dist;
+          closest = node;
+        }
+      });
 
-    setHoveredNode(closest);
-  }, [forceNodes]);
+      setHoveredNode(closest);
+    },
+    [forceNodes],
+  );
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -689,14 +668,18 @@ export const D3SimpleView = ({
             <span style={{ fontWeight: 600, fontSize: "14px" }}>{hoveredNode.label}</span>
           </div>
           <div style={{ color: "#D1D5DB", fontSize: "12px", lineHeight: 1.6 }}>
-            <div><strong>Type:</strong> {hoveredNode.type}</div>
-            <div><strong>ID:</strong> {hoveredNode.id}</div>
+            <div>
+              <strong>Type:</strong> {hoveredNode.type}
+            </div>
+            <div>
+              <strong>ID:</strong> {hoveredNode.id}
+            </div>
             {hoveredNode.parentId && (
               <div style={{ color: "#9CA3AF" }}>👆 Parent: {hoveredNode.parentId}</div>
             )}
             {hoveredNode.childIds.length > 0 && (
               <div style={{ color: "#10B981", marginTop: "4px" }}>
-                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? 'ren' : ''}
+                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? "ren" : ""}
               </div>
             )}
             {hoveredNode.level === 0 && (

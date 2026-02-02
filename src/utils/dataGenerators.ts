@@ -208,7 +208,6 @@ export const generateLargeFirstLevel = (
 
   return { nodes, edges, totalNodes: nodeCounter + 1 };
 };
-
 export const generateHierarchicalData = (
   totalNodes: number = 150,
   maxDepth: number = 2,
@@ -218,6 +217,7 @@ export const generateHierarchicalData = (
   const edges: Edge[] = [];
   let nodeCounter = 0;
 
+  // 1. Nodo raíz
   const coreNode: CustomNode = {
     id: "core",
     position: { x: 0, y: 0 },
@@ -231,7 +231,7 @@ export const generateHierarchicalData = (
         description: "Núcleo principal del sistema",
       },
       isExpanded: true,
-      childCount: childrenPerNode,
+      childCount: 0, // se actualizará después
     },
     style: {
       ...getNodeStyle("core", "active", true),
@@ -243,57 +243,48 @@ export const generateHierarchicalData = (
   nodes.push(coreNode);
   nodeCounter++;
 
-  // Calculate how many nodes we can have per level to ensure all levels are created
-  // We need at least 1 node per level (except level 0 which has the core)
-  const minNodesPerLevel = 1;
-  const minNodesNeeded = 1 + (maxDepth * minNodesPerLevel); // core + at least 1 per level
-  
-  if (totalNodes < minNodesNeeded) {
-    console.warn(`Not enough nodes (${totalNodes}) to create ${maxDepth} levels. Need at least ${minNodesNeeded}.`);
+  const remainingNodes = totalNodes - 1;
+  if (remainingNodes <= 0) {
+    return { nodes, edges, totalNodes: nodeCounter };
   }
 
-  // Calculate target nodes per level to distribute evenly
-  const remainingNodes = totalNodes - 1; // Exclude core
-  const nodesPerLevel: number[] = [];
-  
-  // First, ensure we have at least 1 node per level
-  for (let level = 1; level <= maxDepth; level++) {
-    nodesPerLevel[level] = 0;
-  }
-  
-  // Distribute remaining nodes level by level, breadth-first
-  let nodesToDistribute = remainingNodes;
-  let currentLevel = 1;
-  
-  while (nodesToDistribute > 0 && currentLevel <= maxDepth) {
-    // Calculate how many nodes this level can have based on parent capacity
-    let parentCount = currentLevel === 1 ? 1 : nodesPerLevel[currentLevel - 1];
-    let maxNodesForThisLevel = parentCount * childrenPerNode;
-    
-    // Take the minimum of: what we can fit, what we need, and what's left
-    let nodesForThisLevel = Math.min(
-      maxNodesForThisLevel,
-      Math.ceil(nodesToDistribute / (maxDepth - currentLevel + 1)), // Distribute evenly
-      nodesToDistribute
-    );
-    
-    // Ensure at least 1 node per level if possible
-    if (nodesToDistribute >= (maxDepth - currentLevel + 1)) {
-      nodesForThisLevel = Math.max(nodesForThisLevel, 1);
+  // 2. Decidimos cuántos nodos por nivel (aproximado)
+  // Queremos llegar lo más cerca posible a totalNodes
+  const targetNodesPerLevel: number[] = new Array(maxDepth + 1).fill(0);
+  let nodesLeft = remainingNodes;
+
+  // Nivel 1 suele llevarse la mayor cantidad
+  targetNodesPerLevel[1] = Math.min(nodesLeft, Math.max(8, Math.round(remainingNodes * 0.45)));
+  nodesLeft -= targetNodesPerLevel[1];
+
+  // Niveles intermedios y último nivel
+  for (let level = 2; level <= maxDepth; level++) {
+    if (nodesLeft <= 0) break;
+
+    // El último nivel se lleva lo que sobre
+    if (level === maxDepth) {
+      targetNodesPerLevel[level] = nodesLeft;
+      break;
     }
-    
-    nodesPerLevel[currentLevel] = nodesForThisLevel;
-    nodesToDistribute -= nodesForThisLevel;
-    currentLevel++;
+
+    // Niveles intermedios: repartimos lo que queda
+    const remainingLevels = maxDepth - level + 1;
+    let forThisLevel = Math.round(nodesLeft / remainingLevels);
+
+    // Pero respetamos capacidad de padres
+    const parentsCount = targetNodesPerLevel[level - 1];
+    const maxPossible = parentsCount * childrenPerNode;
+
+    forThisLevel = Math.min(forThisLevel, maxPossible, nodesLeft);
+    targetNodesPerLevel[level] = forThisLevel;
+    nodesLeft -= forThisLevel;
   }
 
-  // Create first level children
-  const firstLevelNodes: CustomNode[] = [];
-  const firstLevelCount = nodesPerLevel[1] || 0;
-  
-  for (let i = 0; i < firstLevelCount && nodeCounter < totalNodes; i++) {
+  // 3. Creamos nivel 1
+  const level1Nodes: CustomNode[] = [];
+  for (let i = 0; i < targetNodesPerLevel[1] && nodeCounter < totalNodes; i++) {
     nodeCounter++;
-    const nodeId = `node-${i}`;
+    const nodeId = `n1-${i}`;
     const type = getRandomType(1);
     const status = getRandomStatus();
 
@@ -301,14 +292,8 @@ export const generateHierarchicalData = (
       id: nodeId,
       position: { x: 0, y: 0 },
       data: {
-        label: `Node ${i}`,
-        metadata: {
-          type,
-          status,
-          level: 1,
-          createdAt: new Date().toISOString(),
-          description: `Child node ${i}`,
-        },
+        label: `Cat ${i + 1}`,
+        metadata: { type, status, level: 1, createdAt: new Date().toISOString(), description: "" },
         isExpanded: maxDepth > 1,
         childCount: 0,
       },
@@ -316,82 +301,80 @@ export const generateHierarchicalData = (
     };
 
     nodes.push(node);
-    firstLevelNodes.push(node);
+    level1Nodes.push(node);
 
     edges.push({
-      id: `edge-root-${nodeId}`,
+      id: `e-core-${nodeId}`,
       source: "core",
       target: nodeId,
       type: "smoothstep",
     });
   }
 
-  // Create deeper levels
-  if (maxDepth > 1) {
-    let currentLevelNodes = firstLevelNodes;
+  // Actualizamos childCount del core
+  coreNode.data.childCount = level1Nodes.length;
 
-    for (let level = 2; level <= maxDepth && currentLevelNodes.length > 0; level++) {
-      const nextLevelNodes: CustomNode[] = [];
-      const targetNodesForThisLevel = nodesPerLevel[level] || 0;
-      
-      if (targetNodesForThisLevel === 0) continue;
+  // 4. Creamos niveles siguientes
+  let parents = level1Nodes;
 
-      // Distribute children among parents
-      let nodesCreated = 0;
-      let parentIndex = 0;
-      
-      while (nodesCreated < targetNodesForThisLevel && nodeCounter < totalNodes && parentIndex < currentLevelNodes.length) {
-        const parentNode = currentLevelNodes[parentIndex];
-        const childrenForThisParent = Math.min(
-          childrenPerNode,
-          targetNodesForThisLevel - nodesCreated,
-          totalNodes - nodeCounter
-        );
-        
-        for (let j = 0; j < childrenForThisParent; j++) {
-          nodeCounter++;
-          const nodeId = `${parentNode.id}-${j}`;
-          const type = getRandomType(level);
-          const status = getRandomStatus();
+  for (let level = 2; level <= maxDepth && parents.length > 0; level++) {
+    const nextParents: CustomNode[] = [];
+    let createdThisLevel = 0;
+    const targetThisLevel = targetNodesPerLevel[level];
 
-          const node: CustomNode = {
-            id: nodeId,
-            position: { x: 0, y: 0 },
-            data: {
-              label: `Node ${nodeId}`,
-              metadata: {
-                type,
-                status,
-                level,
-                createdAt: new Date().toISOString(),
-                description: `Level ${level} node`,
-              },
-              isExpanded: level < maxDepth,
-              childCount: 0,
+    let parentIdx = 0;
+
+    while (createdThisLevel < targetThisLevel && nodeCounter < totalNodes && parentIdx < parents.length) {
+      const parent = parents[parentIdx];
+      // Cuántos hijos le damos a este padre
+      const childrenToCreate = Math.min(
+        childrenPerNode,
+        targetThisLevel - createdThisLevel,
+        totalNodes - nodeCounter
+      );
+
+      for (let j = 0; j < childrenToCreate; j++) {
+        nodeCounter++;
+        const nodeId = `${parent.id}-${j}`;
+        const type = getRandomType(level);
+        const status = getRandomStatus();
+
+        const node: CustomNode = {
+          id: nodeId,
+          position: { x: 0, y: 0 },
+          data: {
+            label: `N${level}-${createdThisLevel + 1}`,
+            metadata: {
+              type,
+              status,
+              level,
+              createdAt: new Date().toISOString(),
+              description: `Nivel ${level}`,
             },
-            style: getNodeStyle(type, status),
-          };
+            isExpanded: level < maxDepth,
+            childCount: 0,
+          },
+          style: getNodeStyle(type, status),
+        };
 
-          nodes.push(node);
-          nextLevelNodes.push(node);
+        nodes.push(node);
+        nextParents.push(node);
 
-          edges.push({
-            id: `edge-${parentNode.id}-${nodeId}`,
-            source: parentNode.id,
-            target: nodeId,
-            type: "smoothstep",
-          });
-          
-          // Update parent child count
-          parentNode.data.childCount = (parentNode.data.childCount || 0) + 1;
-        }
-        
-        nodesCreated += childrenForThisParent;
-        parentIndex++;
+        edges.push({
+          id: `e-${parent.id}-${nodeId}`,
+          source: parent.id,
+          target: nodeId,
+          type: "smoothstep",
+        });
+
+        parent.data.childCount = (parent.data.childCount || 0) + 1;
+        createdThisLevel++;
       }
 
-      currentLevelNodes = nextLevelNodes;
+      parentIdx++;
     }
+
+    parents = nextParents;
   }
 
   return { nodes, edges, totalNodes: nodeCounter };

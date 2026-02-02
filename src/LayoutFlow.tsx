@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -55,31 +55,6 @@ function LayoutFlowContent() {
 
   const { searchTerm, setSearchTerm, searchResults, matchedNodes, hasMatches } = useSearch(nodes);
 
-  // FPS Counter
-  const [fps, setFps] = useState(0);
-  useEffect(() => {
-    let frameCount = 0;
-    let lastTime = performance.now();
-    let rafId: number;
-
-    const loop = () => {
-      const now = performance.now();
-      const delta = now - lastTime;
-
-      if (delta >= 1000) {
-        setFps(Math.round((frameCount * 1000) / delta));
-        frameCount = 0;
-        lastTime = now;
-      }
-
-      frameCount++;
-      rafId = requestAnimationFrame(loop);
-    };
-
-    rafId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-
   const handleConfigChange = useCallback((newConfig: GraphConfig) => {
     setConfig(newConfig);
   }, []);
@@ -125,7 +100,17 @@ function LayoutFlowContent() {
       default:
         return <ForceView {...commonProps} />;
     }
-  }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout, d3LayoutMode, d3CollisionMode]);
+  }, [
+    currentView,
+    nodes,
+    edges,
+    searchResults,
+    maxVisibleNodes,
+    neighborLevels,
+    overviewLayout,
+    d3LayoutMode,
+    d3CollisionMode,
+  ]);
 
   return (
     <div className={styles.layoutContainer}>
@@ -136,8 +121,8 @@ function LayoutFlowContent() {
 
       {/* Panel izquierdo - Configuración */}
       <div className={styles.leftPanel}>
-        <UnifiedControls 
-          config={config} 
+        <UnifiedControls
+          config={config}
           onConfigChange={handleConfigChange}
           renderViewControls={() => (
             <>
@@ -177,7 +162,7 @@ function LayoutFlowContent() {
       </div>
 
       {/* Panel derecho - Métricas */}
-      <Metrics nodesLength={nodes.length} edgesLength={edges.length} fps={fps} />
+      <Metrics nodesLength={nodes.length} edgesLength={edges.length} />
 
       {/* Barra de búsqueda inferior centrada */}
       <BottomSearchBar
