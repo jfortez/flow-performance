@@ -18,7 +18,7 @@ const Metrics = ({ nodesLength, edgesLength }: MetricProps) => {
   return (
     <FloatingStats
       metrics={metrics}
-      position="top-right"
+      position="bottom-left"
       showFps={true}
       showNodeCount={true}
       showEdgeCount={true}

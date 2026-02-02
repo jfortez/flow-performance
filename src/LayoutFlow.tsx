@@ -91,7 +91,6 @@ function LayoutFlowContent() {
     }
   }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout]);
 
-  console.log({ nodes, edges });
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       {/* Top Controls */}
@@ -114,10 +113,7 @@ function LayoutFlowContent() {
       </div>
 
       {/* Left: Unified Controls */}
-      <UnifiedControls
-        config={config}
-        onConfigChange={handleConfigChange}
-      />
+      <UnifiedControls config={config} onConfigChange={handleConfigChange} />
 
       {/* View-specific controls (only for certain views) */}
       {(currentView === "d3canvas" || currentView === "d3cluster") && (
