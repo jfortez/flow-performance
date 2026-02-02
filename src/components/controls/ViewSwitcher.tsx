@@ -11,7 +11,6 @@ const views: { id: ViewType; label: string; description: string }[] = [
   { id: "d3cluster", label: "D3 Cluster", description: "D3 hierarchy cluster layout" },
   { id: "local", label: "Local View", description: "Focus+context with overview and detail panels" },
   { id: "force", label: "Force", description: "Force-directed layout" },
-  { id: "grouped", label: "Grouped", description: "Agrupación progresiva" },
   { id: "dagre", label: "Dagre", description: "Hierarchical layout" },
   { id: "radial", label: "Radial", description: "Radial layout" },
   { id: "concentric", label: "Concentric", description: "Circular rings" },

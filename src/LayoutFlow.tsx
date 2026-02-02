@@ -1,29 +1,27 @@
-import { useMemo, useEffect, useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { generateLargeFirstLevel, generateHierarchicalData } from "./utils/dataGenerators";
 import { useViewState } from "./hooks/useViewState";
 import { useSearch } from "./hooks/useSearch";
-import { usePerformance } from "./hooks/usePerformance";
 
 import { ForceView } from "./components/views/ForceView";
 import { ConcentricView } from "./components/views/ConcentricView";
 import { GridView } from "./components/views/GridView";
 import { DagreView } from "./components/views/DagreView";
 import { RadialView } from "./components/views/RadialView";
-import { GroupedView } from "./components/views/GroupedView";
 import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
 import { D3SimpleView } from "./components/views/D3SimpleView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
 import { SearchBar } from "./components/controls/SearchBar";
-import { FloatingStats } from "./components/controls/FloatingStats";
 import { ConfigControls } from "./components/controls/ConfigControls";
 import { NodeExplorerControl } from "./components/controls/NodeExplorerControl";
 import { LocalViewControls } from "./components/controls/LocalViewControls";
 import { LocalView } from "./components/views/LocalView";
 import type { GraphConfig } from "./types";
+import Metrics from "./components/Metrics";
 
 function LayoutFlowContent() {
   const [config, setConfig] = useState<GraphConfig>({
@@ -36,23 +34,22 @@ function LayoutFlowContent() {
   const [neighborLevels, setNeighborLevels] = useState(2);
   const [overviewLayout, setOverviewLayout] = useState<"cluster" | "tree">("cluster");
 
-  const { currentView, setCurrentView } = useViewState("force");
+  const { currentView, setCurrentView } = useViewState("d3simple");
 
   const { nodes, edges } = useMemo(() => {
     // Use hierarchical data generator for D3 views to support multiple depth levels with children
-    if (currentView === "d3canvas" || currentView === "d3cluster" || currentView === "d3simple" || currentView === "local") {
+    if (
+      currentView === "d3canvas" ||
+      currentView === "d3cluster" ||
+      currentView === "d3simple" ||
+      currentView === "local"
+    ) {
       return generateHierarchicalData(config.nodeCount, config.maxDepth, 3);
     }
     return generateLargeFirstLevel(config.nodeCount);
   }, [config.nodeCount, config.maxDepth, currentView]);
 
   const { searchTerm, setSearchTerm, searchResults, matchedNodes, hasMatches } = useSearch(nodes);
-
-  const { metrics, setElementCounts } = usePerformance();
-
-  useEffect(() => {
-    setElementCounts(nodes.length, edges.length);
-  }, [nodes.length, edges.length, setElementCounts]);
 
   const handleConfigChange = useCallback((newConfig: GraphConfig) => {
     setConfig(newConfig);
@@ -76,8 +73,6 @@ function LayoutFlowContent() {
         return <DagreView {...commonProps} />;
       case "radial":
         return <RadialView {...commonProps} />;
-      case "grouped":
-        return <GroupedView {...commonProps} />;
       case "d3canvas":
         return <D3CanvasView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
       case "d3cluster":
@@ -85,12 +80,19 @@ function LayoutFlowContent() {
       case "d3simple":
         return <D3SimpleView {...commonProps} />;
       case "local":
-        return <LocalView {...commonProps} neighborLevels={neighborLevels} overviewLayout={overviewLayout} />;
+        return (
+          <LocalView
+            {...commonProps}
+            neighborLevels={neighborLevels}
+            overviewLayout={overviewLayout}
+          />
+        );
       default:
         return <ForceView {...commonProps} />;
     }
   }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout]);
 
+  console.log({ nodes, edges });
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
       {/* Top Controls */}
@@ -150,14 +152,7 @@ function LayoutFlowContent() {
       </div>
 
       {/* Right: FPS Stats */}
-      <FloatingStats
-        metrics={metrics}
-        position="top-right"
-        showFps={true}
-        showNodeCount={true}
-        showEdgeCount={true}
-        showRenderTime={false}
-      />
+      <Metrics nodesLength={nodes.length} edgesLength={edges.length} />
 
       {/* Main View Area */}
       <div style={{ width: "100%", height: "100%" }}>{renderView}</div>
