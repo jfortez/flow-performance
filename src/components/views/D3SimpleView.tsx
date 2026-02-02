@@ -69,7 +69,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     // Calculate initial positions in concentric circles by level
     const centerX = dimensions.width / 2 || 400;
     const centerY = dimensions.height / 2 || 300;
-    const radiusStep = 120;
+    const radiusStep = 200; // Aumentado de 120 a 200 para más espacio
 
     // Group by level
     const nodesByLevel = new Map<number, CustomNode[]>();
@@ -356,24 +356,24 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     }
 
     const simulation = forceSimulation(forceNodes as SimulationNodeDatum[])
-      // Repulsion
-      .force("charge", forceManyBody().strength(-400).distanceMax(500))
-      // Center gravity
-      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.05))
-      // Links with strong bond
+      // Stronger repulsion to spread nodes apart
+      .force("charge", forceManyBody().strength(-800).distanceMax(1000))
+      // Weaker center gravity to allow more spread
+      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.02))
+      // Longer links for more space between connected nodes
       .force("link", 
         forceLink(forceLinks as SimulationLinkDatum<SimulationNodeDatum>[])
           .id((d: SimulationNodeDatum) => (d as ForceNode).id)
-          .distance(80)
-          .strength(0.7)
+          .distance(150)
+          .strength(0.5)
       )
-      // Collision
-      .force("collide", forceCollide().radius(30).strength(0.8))
-      // Keep nodes near their initial level-based position
-      .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(0.03))
-      .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(0.03))
-      .alphaDecay(0.02)
-      .velocityDecay(0.4);
+      // Larger collision radius to prevent overlap
+      .force("collide", forceCollide().radius(45).strength(1.0))
+      // Keep nodes near their initial level-based position but weaker
+      .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(0.02))
+      .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(0.02))
+      .alphaDecay(0.015)
+      .velocityDecay(0.5);
 
     simulationRef.current = simulation;
     simulation.tick(80);
