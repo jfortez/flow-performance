@@ -46,6 +46,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [hoveredNode, setHoveredNode] = useState<ForceNode | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
+  const [collisionEnabled, setCollisionEnabled] = useState(true);
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {
@@ -480,8 +481,14 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
           .id((d: SimulationNodeDatum) => (d as ForceNode).id)
           .distance(linkDistance)
           .strength(linkStrength)
-      )
-      .force("collide", forceCollide().radius(collideRadius).strength(collideStrength))
+      );
+    
+    // Only apply collision if enabled
+    if (collisionEnabled) {
+      simulation.force("collide", forceCollide().radius(collideRadius).strength(collideStrength));
+    }
+    
+    simulation
       .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(positionStrength))
       .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(positionStrength))
       .alphaDecay(0.015)
@@ -493,7 +500,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     return () => {
       simulation.stop();
     };
-  }, [forceNodes, forceLinks, dimensions, layoutMode]);
+  }, [forceNodes, forceLinks, dimensions, layoutMode, collisionEnabled]);
 
   // Zoom
   useEffect(() => {
@@ -593,6 +600,34 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
             {mode.label}
           </button>
         ))}
+      </div>
+
+      {/* Collision Toggle */}
+      <div
+        style={{
+          position: "absolute",
+          top: 60,
+          right: 16,
+          zIndex: 20,
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 12px",
+          background: "rgba(255, 255, 255, 0.95)",
+          borderRadius: "8px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+        }}
+      >
+        <input
+          type="checkbox"
+          id="collision-toggle"
+          checked={collisionEnabled}
+          onChange={(e) => setCollisionEnabled(e.target.checked)}
+          style={{ cursor: "pointer" }}
+        />
+        <label htmlFor="collision-toggle" style={{ fontSize: "12px", cursor: "pointer", color: "#374151" }}>
+          Collision
+        </label>
       </div>
 
       <canvas
