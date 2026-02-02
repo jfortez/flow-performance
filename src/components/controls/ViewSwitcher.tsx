@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ViewType } from "../../types";
+import styles from "./ViewSwitcher.module.css";
 
 interface ViewSwitcherProps {
   currentView: ViewType;
@@ -24,90 +25,29 @@ export const ViewSwitcher = ({ currentView, onChangeView }: ViewSwitcherProps) =
   const filteredViews = views.filter((view) => view.category === activeCategory);
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "4px",
-        padding: "6px",
-        background: "rgba(255, 255, 255, 0.95)",
-        borderRadius: "10px",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
-      }}
-    >
-      {/* Category Tabs */}
-      <div
-        style={{
-          display: "flex",
-          gap: "2px",
-          padding: "2px",
-          background: "#F3F4F6",
-          borderRadius: "6px",
-        }}
-      >
+    <div className={styles.viewSwitcher}>
+      <div className={styles.categoryTabs}>
         <button
+          className={`${styles.categoryTab} ${activeCategory === "d3" ? styles.active : ""}`}
           onClick={() => setActiveCategory("d3")}
-          style={{
-            flex: 1,
-            padding: "4px 12px",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "11px",
-            fontWeight: 600,
-            background: activeCategory === "d3" ? "white" : "transparent",
-            color: activeCategory === "d3" ? "#3B82F6" : "#6B7280",
-            boxShadow: activeCategory === "d3" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-            transition: "all 0.2s ease",
-          }}
         >
           D3 Views
         </button>
         <button
+          className={`${styles.categoryTab} ${activeCategory === "reactflow" ? styles.active : ""}`}
           onClick={() => setActiveCategory("reactflow")}
-          style={{
-            flex: 1,
-            padding: "4px 12px",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "11px",
-            fontWeight: 600,
-            background: activeCategory === "reactflow" ? "white" : "transparent",
-            color: activeCategory === "reactflow" ? "#3B82F6" : "#6B7280",
-            boxShadow: activeCategory === "reactflow" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-            transition: "all 0.2s ease",
-          }}
         >
           ReactFlow
         </button>
       </div>
 
-      {/* View Buttons */}
-      <div
-        style={{
-          display: "flex",
-          gap: "3px",
-          padding: "2px",
-        }}
-      >
+      <div className={styles.viewButtons}>
         {filteredViews.map((view) => (
           <button
             key={view.id}
+            className={`${styles.viewButton} ${currentView === view.id ? styles.active : ""}`}
             onClick={() => onChangeView(view.id)}
             title={view.description}
-            style={{
-              padding: "6px 14px",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: currentView === view.id ? "600" : "400",
-              background: currentView === view.id ? "#3B82F6" : "transparent",
-              color: currentView === view.id ? "white" : "#374151",
-              transition: "all 0.2s ease",
-              whiteSpace: "nowrap",
-            }}
           >
             {view.label}
           </button>

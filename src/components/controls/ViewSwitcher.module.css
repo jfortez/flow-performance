@@ -1,0 +1,72 @@
+.viewSwitcher {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.categoryTabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.categoryTab {
+  flex: 1;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+.categoryTab:hover {
+  color: #374151;
+}
+
+.categoryTab.active {
+  background: white;
+  color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.viewButtons {
+  display: flex;
+  gap: 3px;
+  padding: 2px;
+}
+
+.viewButton {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  background: transparent;
+  color: #374151;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.viewButton:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.viewButton.active {
+  background: #3b82f6;
+  color: white;
+  font-weight: 600;
+}

@@ -1,0 +1,53 @@
+.layoutContainer {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.graphArea {
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================
+   NAVEGACIÓN SUPERIOR (ViewSwitcher)
+   ============================================ */
+.navContainer {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: auto;
+}
+
+/* ============================================
+   PANEL LATERAL IZQUIERDO (Configuración)
+   ============================================ */
+.leftPanel {
+  position: absolute;
+  top: 80px;
+  left: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+  max-width: 280px;
+}
+
+/* Controles específicos de vista */
+.viewControls {
+  margin-top: 8px;
+}
+
+/* ============================================
+   PANEL LATERAL DERECHO (Métricas)
+   ============================================ */
+/* Las métricas están en su propio componente */
+
+/* ============================================
+   BARRA DE BÚSQUEDA INFERIOR
+   ============================================ */
+/* La búsqueda está en su propio componente */

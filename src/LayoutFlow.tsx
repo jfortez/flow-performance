@@ -19,8 +19,9 @@ import { UnifiedControls, BottomSearchBar } from "./components/controls/UnifiedC
 import { NodeExplorerControl } from "./components/controls/NodeExplorerControl";
 import { LocalViewControls } from "./components/controls/LocalViewControls";
 import { LocalView } from "./components/views/LocalView";
+import { Metrics } from "./components/Metrics";
 import type { GraphConfig } from "./types";
-import Metrics from "./components/Metrics";
+import styles from "./LayoutFlow.module.css";
 
 function LayoutFlowContent() {
   const [config, setConfig] = useState<GraphConfig>({
@@ -36,7 +37,6 @@ function LayoutFlowContent() {
   const { currentView, setCurrentView } = useViewState("d3simple");
 
   const { nodes, edges } = useMemo(() => {
-    // Use hierarchical data generator for D3 views to support multiple depth levels with children
     if (
       currentView === "d3canvas" ||
       currentView === "d3cluster" ||
@@ -92,78 +92,50 @@ function LayoutFlowContent() {
   }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout]);
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
-      {/* Top Controls */}
-      <div
-        style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          right: 16,
-          zIndex: 10,
-          display: "flex",
-          justifyContent: "center",
-          pointerEvents: "none",
-        }}
-      >
-        {/* Center: View Switcher */}
-        <div style={{ pointerEvents: "auto" }}>
-          <ViewSwitcher currentView={currentView} onChangeView={setCurrentView} />
-        </div>
+    <div className={styles.layoutContainer}>
+      {/* Navegación superior centrada */}
+      <div className={styles.navContainer}>
+        <ViewSwitcher currentView={currentView} onChangeView={setCurrentView} />
       </div>
 
-      {/* Left: Unified Controls */}
-      <UnifiedControls config={config} onConfigChange={handleConfigChange} />
+      {/* Panel izquierdo - Configuración */}
+      <div className={styles.leftPanel}>
+        <UnifiedControls config={config} onConfigChange={handleConfigChange} />
+        
+        {/* Controles específicos de vista */}
+        {(currentView === "d3canvas" || currentView === "d3cluster") && (
+          <div className={styles.viewControls}>
+            <NodeExplorerControl
+              value={maxVisibleNodes}
+              maxValue={config.nodeCount}
+              onChange={setMaxVisibleNodes}
+            />
+          </div>
+        )}
+        {currentView === "local" && (
+          <div className={styles.viewControls}>
+            <LocalViewControls
+              neighborLevels={neighborLevels}
+              onChangeNeighborLevels={setNeighborLevels}
+              overviewLayout={overviewLayout}
+              onChangeOverviewLayout={setOverviewLayout}
+            />
+          </div>
+        )}
+      </div>
 
-      {/* View-specific controls (only for certain views) */}
-      {(currentView === "d3canvas" || currentView === "d3cluster") && (
-        <div
-          style={{
-            position: "absolute",
-            top: 140,
-            left: 16,
-            zIndex: 10,
-            pointerEvents: "auto",
-          }}
-        >
-          <NodeExplorerControl
-            value={maxVisibleNodes}
-            maxValue={config.nodeCount}
-            onChange={setMaxVisibleNodes}
-          />
-        </div>
-      )}
-      {currentView === "local" && (
-        <div
-          style={{
-            position: "absolute",
-            top: 140,
-            left: 16,
-            zIndex: 10,
-            pointerEvents: "auto",
-          }}
-        >
-          <LocalViewControls
-            neighborLevels={neighborLevels}
-            onChangeNeighborLevels={setNeighborLevels}
-            overviewLayout={overviewLayout}
-            onChangeOverviewLayout={setOverviewLayout}
-          />
-        </div>
-      )}
+      {/* Panel derecho - Métricas */}
+      <Metrics nodesLength={nodes.length} edgesLength={edges.length} />
 
-      {/* Bottom Center: Search Bar */}
+      {/* Barra de búsqueda inferior centrada */}
       <BottomSearchBar
         value={searchTerm}
         onChange={setSearchTerm}
         resultCount={hasMatches ? matchedNodes.length : undefined}
       />
 
-      {/* Right: FPS Stats */}
-      <Metrics nodesLength={nodes.length} edgesLength={edges.length} />
-
-      {/* Main View Area */}
-      <div style={{ width: "100%", height: "100%" }}>{renderView}</div>
+      {/* Área principal del grafo */}
+      <div className={styles.graphArea}>{renderView}</div>
     </div>
   );
 }
