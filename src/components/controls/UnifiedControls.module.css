@@ -22,13 +22,6 @@
   font-size: 13px;
   font-weight: 500;
   color: #374151;
-  transition: all 0.2s ease;
-}
-
-.configButton:hover {
-  background: rgba(255, 255, 255, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  transform: translateY(-1px);
 }
 
 .configButton svg {
@@ -41,7 +34,6 @@
   width: 14px;
   height: 14px;
   margin-left: auto;
-  transition: transform 0.2s ease;
 }
 
 .expanded {
@@ -59,18 +51,6 @@
   gap: 20px;
   min-width: 260px;
   max-width: 300px;
-  animation: slideDown 0.2s ease;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .sliderControl {
@@ -122,11 +102,6 @@
   background: #3b82f6;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
-  transition: transform 0.1s ease;
-}
-
-.sliderInput::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
 }
 
 .sliderInput::-moz-range-thumb {
@@ -176,13 +151,6 @@
   background: white;
   color: #374151;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.presetButton:hover {
-  border-color: #3b82f6;
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.05);
 }
 
 .presetButtonActive {
@@ -212,12 +180,6 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   min-width: 400px;
   max-width: 600px;
-  transition: box-shadow 0.2s ease;
-}
-
-.searchWrapper:focus-within {
-  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.3);
 }
 
 .searchIcon {
@@ -252,12 +214,6 @@
   color: #6b7280;
   font-size: 14px;
   border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.searchClear:hover {
-  background: #f3f4f6;
-  color: #374151;
 }
 
 .searchShortcut {
