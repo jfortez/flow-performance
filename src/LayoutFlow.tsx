@@ -15,8 +15,7 @@ import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
 import { D3SimpleView } from "./components/views/D3SimpleView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
-import { SearchBar } from "./components/controls/SearchBar";
-import { ConfigControls } from "./components/controls/ConfigControls";
+import { UnifiedControls, BottomSearchBar } from "./components/controls/UnifiedControls";
 import { NodeExplorerControl } from "./components/controls/NodeExplorerControl";
 import { LocalViewControls } from "./components/controls/LocalViewControls";
 import { LocalView } from "./components/views/LocalView";
@@ -114,42 +113,55 @@ function LayoutFlowContent() {
         </div>
       </div>
 
-      {/* Left Sidebar: Controls */}
-      <div
-        style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          zIndex: 10,
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-          pointerEvents: "auto",
-          maxWidth: "280px",
-        }}
-      >
-        <ConfigControls config={config} onChange={handleConfigChange} />
-        <SearchBar
-          value={searchTerm}
-          onChange={setSearchTerm}
-          resultCount={hasMatches ? matchedNodes.length : undefined}
-        />
-        {(currentView === "d3canvas" || currentView === "d3cluster") && (
+      {/* Left: Unified Controls */}
+      <UnifiedControls
+        config={config}
+        onConfigChange={handleConfigChange}
+      />
+
+      {/* View-specific controls (only for certain views) */}
+      {(currentView === "d3canvas" || currentView === "d3cluster") && (
+        <div
+          style={{
+            position: "absolute",
+            top: 140,
+            left: 16,
+            zIndex: 10,
+            pointerEvents: "auto",
+          }}
+        >
           <NodeExplorerControl
             value={maxVisibleNodes}
             maxValue={config.nodeCount}
             onChange={setMaxVisibleNodes}
           />
-        )}
-        {currentView === "local" && (
+        </div>
+      )}
+      {currentView === "local" && (
+        <div
+          style={{
+            position: "absolute",
+            top: 140,
+            left: 16,
+            zIndex: 10,
+            pointerEvents: "auto",
+          }}
+        >
           <LocalViewControls
             neighborLevels={neighborLevels}
             onChangeNeighborLevels={setNeighborLevels}
             overviewLayout={overviewLayout}
             onChangeOverviewLayout={setOverviewLayout}
           />
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Bottom Center: Search Bar */}
+      <BottomSearchBar
+        value={searchTerm}
+        onChange={setSearchTerm}
+        resultCount={hasMatches ? matchedNodes.length : undefined}
+      />
 
       {/* Right: FPS Stats */}
       <Metrics nodesLength={nodes.length} edgesLength={edges.length} />
