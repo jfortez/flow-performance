@@ -285,3 +285,8 @@
 .searchResultsNotFound {
   color: #ef4444;
 }
+
+/* View Controls Container */
+.viewControlsContainer {
+  margin-top: 8px;
+}

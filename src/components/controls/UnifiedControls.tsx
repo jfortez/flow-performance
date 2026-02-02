@@ -5,11 +5,13 @@ import styles from "./UnifiedControls.module.css";
 interface UnifiedControlsProps {
   config: GraphConfig;
   onConfigChange: (config: GraphConfig) => void;
+  renderViewControls?: () => React.ReactNode;
 }
 
 export const UnifiedControls = ({
   config,
   onConfigChange,
+  renderViewControls,
 }: UnifiedControlsProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -127,6 +129,11 @@ export const UnifiedControls = ({
               ))}
             </div>
           </div>
+        </div>
+      )}
+      {!isExpanded && renderViewControls && (
+        <div className={styles.viewControlsContainer}>
+          {renderViewControls()}
         </div>
       )}
     </div>

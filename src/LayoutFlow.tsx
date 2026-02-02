@@ -136,38 +136,44 @@ function LayoutFlowContent() {
 
       {/* Panel izquierdo - Configuración */}
       <div className={styles.leftPanel}>
-        <UnifiedControls config={config} onConfigChange={handleConfigChange} />
-        
-        {/* Controles específicos de vista */}
-        {(currentView === "d3canvas" || currentView === "d3cluster") && (
-          <div className={styles.viewControls}>
-            <NodeExplorerControl
-              value={maxVisibleNodes}
-              maxValue={config.nodeCount}
-              onChange={setMaxVisibleNodes}
-            />
-          </div>
-        )}
-        {currentView === "local" && (
-          <div className={styles.viewControls}>
-            <LocalViewControls
-              neighborLevels={neighborLevels}
-              onChangeNeighborLevels={setNeighborLevels}
-              overviewLayout={overviewLayout}
-              onChangeOverviewLayout={setOverviewLayout}
-            />
-          </div>
-        )}
-        {currentView === "d3simple" && (
-          <div className={styles.viewControls}>
-            <D3SimpleControls
-              layoutMode={d3LayoutMode}
-              onLayoutModeChange={setD3LayoutMode}
-              collisionMode={d3CollisionMode}
-              onCollisionModeChange={setD3CollisionMode}
-            />
-          </div>
-        )}
+        <UnifiedControls 
+          config={config} 
+          onConfigChange={handleConfigChange}
+          renderViewControls={() => (
+            <>
+              {/* Controles específicos de vista */}
+              {(currentView === "d3canvas" || currentView === "d3cluster") && (
+                <div className={styles.viewControls}>
+                  <NodeExplorerControl
+                    value={maxVisibleNodes}
+                    maxValue={config.nodeCount}
+                    onChange={setMaxVisibleNodes}
+                  />
+                </div>
+              )}
+              {currentView === "local" && (
+                <div className={styles.viewControls}>
+                  <LocalViewControls
+                    neighborLevels={neighborLevels}
+                    onChangeNeighborLevels={setNeighborLevels}
+                    overviewLayout={overviewLayout}
+                    onChangeOverviewLayout={setOverviewLayout}
+                  />
+                </div>
+              )}
+              {currentView === "d3simple" && (
+                <div className={styles.viewControls}>
+                  <D3SimpleControls
+                    layoutMode={d3LayoutMode}
+                    onLayoutModeChange={setD3LayoutMode}
+                    collisionMode={d3CollisionMode}
+                    onCollisionModeChange={setD3CollisionMode}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        />
       </div>
 
       {/* Panel derecho - Métricas */}
