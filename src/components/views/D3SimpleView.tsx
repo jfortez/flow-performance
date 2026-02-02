@@ -46,7 +46,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [hoveredNode, setHoveredNode] = useState<ForceNode | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
-  const [collisionEnabled, setCollisionEnabled] = useState(true);
+  const [collisionMode, setCollisionMode] = useState<"full" | "minimal" | "none">("full");
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {
@@ -483,10 +483,15 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
           .strength(linkStrength)
       );
     
-    // Only apply collision if enabled
-    if (collisionEnabled) {
+    // Apply collision based on mode
+    if (collisionMode === "full") {
       simulation.force("collide", forceCollide().radius(collideRadius).strength(collideStrength));
+    } else if (collisionMode === "minimal") {
+      // Minimal collision: only prevent nodes from overlapping with each other
+      // but with a smaller radius to allow closer packing
+      simulation.force("collide", forceCollide().radius(25).strength(0.5));
     }
+    // "none" mode: no collision force applied
     
     simulation
       .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(positionStrength))
@@ -500,7 +505,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     return () => {
       simulation.stop();
     };
-  }, [forceNodes, forceLinks, dimensions, layoutMode, collisionEnabled]);
+  }, [forceNodes, forceLinks, dimensions, layoutMode, collisionMode]);
 
   // Zoom
   useEffect(() => {
@@ -602,7 +607,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
         ))}
       </div>
 
-      {/* Collision Toggle */}
+      {/* Collision Mode Selector */}
       <div
         style={{
           position: "absolute",
@@ -610,24 +615,42 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
           right: 16,
           zIndex: 20,
           display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          padding: "8px 12px",
+          flexDirection: "column",
+          gap: "4px",
+          padding: "8px",
           background: "rgba(255, 255, 255, 0.95)",
           borderRadius: "8px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
         }}
       >
-        <input
-          type="checkbox"
-          id="collision-toggle"
-          checked={collisionEnabled}
-          onChange={(e) => setCollisionEnabled(e.target.checked)}
-          style={{ cursor: "pointer" }}
-        />
-        <label htmlFor="collision-toggle" style={{ fontSize: "12px", cursor: "pointer", color: "#374151" }}>
+        <div style={{ fontSize: "11px", color: "#6B7280", fontWeight: 600, marginBottom: "4px" }}>
           Collision
-        </label>
+        </div>
+        {[
+          { id: "full", label: "Full", desc: "Strong repulsion" },
+          { id: "minimal", label: "Minimal", desc: "Light spacing" },
+          { id: "none", label: "None", desc: "No collision" },
+        ].map((mode) => (
+          <button
+            key={mode.id}
+            onClick={() => setCollisionMode(mode.id as "full" | "minimal" | "none")}
+            title={mode.desc}
+            style={{
+              padding: "4px 8px",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "11px",
+              fontWeight: collisionMode === mode.id ? "600" : "400",
+              background: collisionMode === mode.id ? "#3B82F6" : "transparent",
+              color: collisionMode === mode.id ? "white" : "#374151",
+              transition: "all 0.2s ease",
+              textAlign: "left",
+            }}
+          >
+            {mode.label}
+          </button>
+        ))}
       </div>
 
       <canvas
