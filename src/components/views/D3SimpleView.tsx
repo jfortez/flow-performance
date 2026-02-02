@@ -35,6 +35,8 @@ interface D3SimpleViewProps {
   searchResults: Array<{ node: CustomNode; matches: boolean }>;
 }
 
+type LayoutMode = "concentric" | "progressive" | "hierarchical";
+
 export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,6 +45,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
   const rafRef = useRef<number | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [hoveredNode, setHoveredNode] = useState<ForceNode | null>(null);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {
@@ -66,10 +69,9 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
       }
     });
 
-    // Calculate initial positions in concentric circles by level
+    // Calculate initial positions based on layout mode
     const centerX = dimensions.width / 2 || 400;
     const centerY = dimensions.height / 2 || 300;
-    const radiusStep = 200; // Aumentado de 120 a 200 para más espacio
 
     // Group by level
     const nodesByLevel = new Map<number, CustomNode[]>();
@@ -83,18 +85,78 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     const forceNodesList: ForceNode[] = [];
     const nodesByIdMap = new Map<string, ForceNode>();
 
-    nodesByLevel.forEach((levelNodes, level) => {
-      const radius = level * radiusStep;
-      const angleStep = (2 * Math.PI) / levelNodes.length;
+    // Calculate positions based on layout mode
+    const getInitialPosition = (level: number, index: number, levelNodes: CustomNode[]): { x: number; y: number } => {
+      switch (layoutMode) {
+        case "progressive":
+          // Progressive radial spacing: exponential growth
+          const progressiveRadius = level === 0 ? 0 : 150 * Math.pow(1.8, level - 1);
+          const progressiveAngleStep = (2 * Math.PI) / levelNodes.length;
+          const progressiveAngle = progressiveAngleStep * index;
+          return {
+            x: centerX + Math.cos(progressiveAngle) * progressiveRadius,
+            y: centerY + Math.sin(progressiveAngle) * progressiveRadius,
+          };
+        
+        case "hierarchical":
+          // Tree-like hierarchical positioning
+          if (level === 0) {
+            return { x: centerX, y: centerY };
+          }
+          
+          // Calculate angular sector for each parent
+          const parentId = parentMap.get(levelNodes[index].id);
+          if (parentId) {
+            const parentNode = nodesByIdMap.get(parentId);
+            if (parentNode) {
+              // Get siblings
+              const siblings = childrenMap.get(parentId) || [];
+              const siblingIndex = siblings.indexOf(levelNodes[index].id);
+              const totalSiblings = siblings.length;
+              
+              // Calculate angle based on parent's position and sibling index
+              const parentAngle = Math.atan2(parentNode.y - centerY, parentNode.x - centerX);
+              const angleSpread = Math.PI / 3; // 60 degrees spread
+              const angleOffset = (siblingIndex - (totalSiblings - 1) / 2) * (angleSpread / Math.max(totalSiblings - 1, 1));
+              const angle = parentAngle + angleOffset;
+              
+              const hierarchicalRadius = 180 + (level - 1) * 120;
+              return {
+                x: centerX + Math.cos(angle) * hierarchicalRadius,
+                y: centerY + Math.sin(angle) * hierarchicalRadius,
+              };
+            }
+          }
+          // Fallback to concentric
+          const fallbackRadius = level * 200;
+          const fallbackAngleStep = (2 * Math.PI) / levelNodes.length;
+          const fallbackAngle = fallbackAngleStep * index;
+          return {
+            x: centerX + Math.cos(fallbackAngle) * fallbackRadius,
+            y: centerY + Math.sin(fallbackAngle) * fallbackRadius,
+          };
+        
+        case "concentric":
+        default:
+          // Original concentric circles
+          const radiusStep = 200;
+          const radius = level * radiusStep;
+          const angleStep = (2 * Math.PI) / levelNodes.length;
+          const angle = angleStep * index;
+          return {
+            x: centerX + Math.cos(angle) * radius,
+            y: centerY + Math.sin(angle) * radius,
+          };
+      }
+    };
 
+    nodesByLevel.forEach((levelNodes, level) => {
       levelNodes.forEach((node, index) => {
         const searchResult = searchResults.find(r => r.node.id === node.id);
         const isMatch = searchResult?.matches || false;
         const style = node.style as Record<string, string> || {};
         
-        const angle = angleStep * index;
-        const initialX = centerX + Math.cos(angle) * radius;
-        const initialY = centerY + Math.sin(angle) * radius;
+        const { x: initialX, y: initialY } = getInitialPosition(level, index, levelNodes);
 
         const forceNode: ForceNode = {
           id: node.id,
@@ -180,15 +242,31 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
       }
     }
 
-    // Determine connected nodes when hovering
+    // Determine connected nodes when hovering - propagate to all ancestors up to root
     const connectedNodeIds = new Set<string>();
     if (hoveredNode) {
-      // Add parent
-      if (hoveredNode.parentId) connectedNodeIds.add(hoveredNode.parentId);
-      // Add children
-      hoveredNode.childIds.forEach(id => connectedNodeIds.add(id));
       // Add self
       connectedNodeIds.add(hoveredNode.id);
+      
+      // Add all ancestors (parent, grandparent, etc.) up to root
+      let currentId: string | undefined = hoveredNode.parentId;
+      while (currentId) {
+        connectedNodeIds.add(currentId);
+        const parentNode = nodesById.get(currentId);
+        currentId = parentNode?.parentId;
+      }
+      
+      // Add all descendants (children, grandchildren, etc.)
+      const addDescendants = (nodeId: string) => {
+        const node = nodesById.get(nodeId);
+        if (node) {
+          node.childIds.forEach(childId => {
+            connectedNodeIds.add(childId);
+            addDescendants(childId);
+          });
+        }
+      };
+      addDescendants(hoveredNode.id);
     }
 
     // Draw links
@@ -345,7 +423,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     };
   }, [render]);
 
-  // Force simulation
+  // Force simulation with layout mode-specific forces
   useEffect(() => {
     if (forceNodes.length === 0 || dimensions.width === 0) {
       return undefined;
@@ -355,23 +433,57 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
       simulationRef.current.stop();
     }
 
+    // Configure forces based on layout mode
+    let chargeStrength = -800;
+    let chargeDistanceMax = 1000;
+    let linkDistance = 150;
+    let linkStrength = 0.5;
+    let collideRadius = 45;
+    let collideStrength = 1.0;
+    let positionStrength = 0.02;
+    let centerStrength = 0.02;
+
+    switch (layoutMode) {
+      case "progressive":
+        // Progressive mode: stronger repulsion, weaker positioning
+        chargeStrength = -1200;
+        chargeDistanceMax = 1500;
+        linkDistance = 200;
+        linkStrength = 0.3;
+        collideRadius = 55;
+        positionStrength = 0.015;
+        centerStrength = 0.01;
+        break;
+      
+      case "hierarchical":
+        // Hierarchical mode: weaker repulsion, stronger positioning
+        chargeStrength = -500;
+        chargeDistanceMax = 800;
+        linkDistance = 180;
+        linkStrength = 0.7;
+        collideRadius = 40;
+        positionStrength = 0.04;
+        centerStrength = 0.03;
+        break;
+      
+      case "concentric":
+      default:
+        // Default concentric mode
+        break;
+    }
+
     const simulation = forceSimulation(forceNodes as SimulationNodeDatum[])
-      // Stronger repulsion to spread nodes apart
-      .force("charge", forceManyBody().strength(-800).distanceMax(1000))
-      // Weaker center gravity to allow more spread
-      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.02))
-      // Longer links for more space between connected nodes
+      .force("charge", forceManyBody().strength(chargeStrength).distanceMax(chargeDistanceMax))
+      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(centerStrength))
       .force("link", 
         forceLink(forceLinks as SimulationLinkDatum<SimulationNodeDatum>[])
           .id((d: SimulationNodeDatum) => (d as ForceNode).id)
-          .distance(150)
-          .strength(0.5)
+          .distance(linkDistance)
+          .strength(linkStrength)
       )
-      // Larger collision radius to prevent overlap
-      .force("collide", forceCollide().radius(45).strength(1.0))
-      // Keep nodes near their initial level-based position but weaker
-      .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(0.02))
-      .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(0.02))
+      .force("collide", forceCollide().radius(collideRadius).strength(collideStrength))
+      .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(positionStrength))
+      .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(positionStrength))
       .alphaDecay(0.015)
       .velocityDecay(0.5);
 
@@ -381,7 +493,7 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     return () => {
       simulation.stop();
     };
-  }, [forceNodes, forceLinks, dimensions]);
+  }, [forceNodes, forceLinks, dimensions, layoutMode]);
 
   // Zoom
   useEffect(() => {
@@ -442,6 +554,47 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
+      {/* Layout Mode Control */}
+      <div
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          zIndex: 20,
+          display: "flex",
+          gap: "8px",
+          padding: "8px",
+          background: "rgba(255, 255, 255, 0.95)",
+          borderRadius: "8px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+        }}
+      >
+        {[
+          { id: "concentric" as LayoutMode, label: "Concentric", desc: "Circular rings" },
+          { id: "progressive" as LayoutMode, label: "Progressive", desc: "Exponential spacing" },
+          { id: "hierarchical" as LayoutMode, label: "Tree", desc: "Branch-like layout" },
+        ].map((mode) => (
+          <button
+            key={mode.id}
+            onClick={() => setLayoutMode(mode.id)}
+            title={mode.desc}
+            style={{
+              padding: "6px 12px",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: layoutMode === mode.id ? "600" : "400",
+              background: layoutMode === mode.id ? "#3B82F6" : "transparent",
+              color: layoutMode === mode.id ? "white" : "#374151",
+              transition: "all 0.2s ease",
+            }}
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+
       <canvas
         ref={canvasRef}
         style={{ width: "100%", height: "100%", cursor: hoveredNode ? "pointer" : "grab" }}
