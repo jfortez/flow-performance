@@ -125,7 +125,7 @@ function LayoutFlowContent() {
       default:
         return <ForceView {...commonProps} />;
     }
-  }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout]);
+  }, [currentView, nodes, edges, searchResults, maxVisibleNodes, neighborLevels, overviewLayout, d3LayoutMode, d3CollisionMode]);
 
   return (
     <div className={styles.layoutContainer}>
