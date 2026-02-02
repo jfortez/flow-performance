@@ -1,28 +1,32 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { hierarchy, tree } from "d3-hierarchy";
+import { forceSimulation, forceManyBody, forceCenter, forceLink, forceCollide, forceX, forceY } from "d3-force";
 import { zoom, zoomIdentity } from "d3-zoom";
 import { select } from "d3-selection";
 import type { Edge } from "@xyflow/react";
+import type { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
 import type { CustomNode } from "../../types";
 
-interface TreeNode {
+interface ForceNode extends SimulationNodeDatum {
   id: string;
   label: string;
   x: number;
   y: number;
+  vx: number;
+  vy: number;
   color: string;
   borderColor: string;
   type: string;
   level: number;
   isMatch: boolean;
-  children?: TreeNode[];
-  parent?: TreeNode;
-  data: CustomNode;
+  parentId?: string;
+  childIds: string[];
+  initialX: number;
+  initialY: number;
 }
 
-interface TreeLink {
-  source: TreeNode;
-  target: TreeNode;
+interface ForceLink extends SimulationLinkDatum<ForceNode> {
+  source: string | ForceNode;
+  target: string | ForceNode;
 }
 
 interface D3SimpleViewProps {
@@ -34,20 +38,20 @@ interface D3SimpleViewProps {
 export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const simulationRef = useRef<ReturnType<typeof forceSimulation> | null>(null);
   const transformRef = useRef(zoomIdentity);
   const rafRef = useRef<number | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [hoveredNode, setHoveredNode] = useState<TreeNode | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<ForceNode | null>(null);
 
-  // Build hierarchical tree structure
-  const treeData = useMemo(() => {
+  // Build hierarchical structure with parent-child relationships
+  const { forceNodes, forceLinks, nodesById } = useMemo(() => {
     const visibleCount = Math.min(nodes.length, 200);
     const visibleNodes = nodes.slice(0, visibleCount);
     
-    if (visibleNodes.length === 0) return null;
-
-    // Build parent-child relationships
+    // Build relationships
     const nodeMap = new Map<string, CustomNode>();
+    const parentMap = new Map<string, string>();
     const childrenMap = new Map<string, string[]>();
     
     visibleNodes.forEach(node => {
@@ -56,83 +60,82 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     });
 
     edges.forEach(edge => {
-      if (childrenMap.has(edge.source) && nodeMap.has(edge.target)) {
-        childrenMap.get(edge.source)!.push(edge.target);
+      if (nodeMap.has(edge.source) && nodeMap.has(edge.target)) {
+        childrenMap.get(edge.source)?.push(edge.target);
+        parentMap.set(edge.target, edge.source);
       }
     });
 
-    // Find root node
-    const rootNode = visibleNodes.find(n => n.data.metadata.level === 0);
-    if (!rootNode) return null;
+    // Calculate initial positions in concentric circles by level
+    const centerX = dimensions.width / 2 || 400;
+    const centerY = dimensions.height / 2 || 300;
+    const radiusStep = 120;
 
-    // Build tree recursively
-    const buildTree = (nodeId: string): TreeNode | null => {
-      const node = nodeMap.get(nodeId);
-      if (!node) return null;
+    // Group by level
+    const nodesByLevel = new Map<number, CustomNode[]>();
+    visibleNodes.forEach(node => {
+      const level = node.data.metadata.level;
+      if (!nodesByLevel.has(level)) nodesByLevel.set(level, []);
+      nodesByLevel.get(level)!.push(node);
+    });
 
-      const searchResult = searchResults.find(r => r.node.id === node.id);
-      const isMatch = searchResult?.matches || false;
-      const style = node.style as Record<string, string> || {};
+    // Create force nodes with initial positions
+    const forceNodesList: ForceNode[] = [];
+    const nodesByIdMap = new Map<string, ForceNode>();
 
-      const children = childrenMap.get(nodeId) || [];
-      const childNodes = children
-        .map(childId => buildTree(childId))
-        .filter((child): child is TreeNode => child !== null);
+    nodesByLevel.forEach((levelNodes, level) => {
+      const radius = level * radiusStep;
+      const angleStep = (2 * Math.PI) / levelNodes.length;
 
-      return {
-        id: node.id,
-        label: node.data.label,
-        x: 0,
-        y: 0,
-        color: style.background || "#E3F2FD",
-        borderColor: isMatch ? "#FFC107" : style.border?.split(" ")[2] || "#1976D2",
-        type: node.data.metadata.type,
-        level: node.data.metadata.level,
-        isMatch,
-        children: childNodes.length > 0 ? childNodes : undefined,
-        data: node,
-      };
-    };
+      levelNodes.forEach((node, index) => {
+        const searchResult = searchResults.find(r => r.node.id === node.id);
+        const isMatch = searchResult?.matches || false;
+        const style = node.style as Record<string, string> || {};
+        
+        const angle = angleStep * index;
+        const initialX = centerX + Math.cos(angle) * radius;
+        const initialY = centerY + Math.sin(angle) * radius;
 
-    return buildTree(rootNode.id);
-  }, [nodes, edges, searchResults]);
+        const forceNode: ForceNode = {
+          id: node.id,
+          label: node.data.label,
+          x: initialX,
+          y: initialY,
+          vx: 0,
+          vy: 0,
+          color: style.background || "#E3F2FD",
+          borderColor: isMatch ? "#FFC107" : style.border?.split(" ")[2] || "#1976D2",
+          type: node.data.metadata.type,
+          level,
+          isMatch,
+          parentId: parentMap.get(node.id),
+          childIds: childrenMap.get(node.id) || [],
+          initialX,
+          initialY,
+        };
 
-  // Apply tree layout
-  const { treeNodes, treeLinks } = useMemo(() => {
-    if (!treeData || dimensions.width === 0) {
-      return { treeNodes: [], treeLinks: [] };
-    }
+        forceNodesList.push(forceNode);
+        nodesByIdMap.set(node.id, forceNode);
+      });
+    });
 
-    // Create d3 hierarchy
-    const root = hierarchy<TreeNode>(treeData, d => d.children);
-
-    // Apply tree layout
-    const treeLayout = tree<TreeNode>()
-      .size([dimensions.height - 100, dimensions.width - 200])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 2));
-
-    treeLayout(root);
-
-    // Extract nodes and links
-    const nodes: TreeNode[] = [];
-    const links: TreeLink[] = [];
-
-    root.descendants().forEach(d => {
-      const node = d.data;
-      node.x = (d.y ?? 0) + 100;
-      node.y = (d.x ?? 0) + 50;
-      nodes.push(node);
-
-      if (d.parent) {
-        links.push({
-          source: d.parent.data,
-          target: node,
+    // Create links
+    const linksList: ForceLink[] = [];
+    edges.forEach(edge => {
+      if (nodesByIdMap.has(edge.source) && nodesByIdMap.has(edge.target)) {
+        linksList.push({
+          source: edge.source,
+          target: edge.target,
         });
       }
     });
 
-    return { treeNodes: nodes, treeLinks: links };
-  }, [treeData, dimensions]);
+    return { 
+      forceNodes: forceNodesList, 
+      forceLinks: linksList,
+      nodesById: nodesByIdMap 
+    };
+  }, [nodes, edges, searchResults, dimensions]);
 
   // Render function
   const render = useCallback(() => {
@@ -151,79 +154,92 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     ctx.translate(transform.x, transform.y);
     ctx.scale(transform.k, transform.k);
 
+    const centerX = dimensions.width / 2 || 400;
+    const centerY = dimensions.height / 2 || 300;
+
+    // Draw level circles (rings)
+    const maxLevel = Math.max(...forceNodes.map(n => n.level), 0);
+    for (let level = 1; level <= maxLevel; level++) {
+      const radius = level * 120;
+      
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(200, 200, 200, ${0.3 - level * 0.04})`;
+      ctx.lineWidth = 1 / transform.k;
+      ctx.setLineDash([5 / transform.k, 5 / transform.k]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Level label
+      if (transform.k > 0.5) {
+        ctx.fillStyle = `rgba(150, 150, 150, ${0.7 - level * 0.1})`;
+        ctx.font = `${Math.max(10, 11 / transform.k)}px system-ui, sans-serif`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`Level ${level}`, centerX + radius + 8 / transform.k, centerY);
+      }
+    }
+
     // Determine connected nodes when hovering
     const connectedNodeIds = new Set<string>();
-    const connectedLinks: TreeLink[] = [];
-    const disconnectedLinks: TreeLink[] = [];
-
     if (hoveredNode) {
-      treeLinks.forEach(link => {
-        if (link.source.id === hoveredNode.id || link.target.id === hoveredNode.id) {
-          connectedLinks.push(link);
-          connectedNodeIds.add(link.source.id);
-          connectedNodeIds.add(link.target.id);
-        } else {
-          disconnectedLinks.push(link);
-        }
-      });
+      // Add parent
+      if (hoveredNode.parentId) connectedNodeIds.add(hoveredNode.parentId);
+      // Add children
+      hoveredNode.childIds.forEach(id => connectedNodeIds.add(id));
+      // Add self
+      connectedNodeIds.add(hoveredNode.id);
     }
 
-    // Draw disconnected links (dimmed)
-    if (hoveredNode) {
-      ctx.strokeStyle = "rgba(100, 100, 100, 0.08)";
-      ctx.lineWidth = 0.5 / transform.k;
-    } else {
-      ctx.strokeStyle = "rgba(100, 100, 100, 0.3)";
-      ctx.lineWidth = 1 / transform.k;
-    }
+    // Draw links
+    const isHovered = !!hoveredNode;
+    
+    forceLinks.forEach(link => {
+      const source = typeof link.source === "string" 
+        ? nodesById.get(link.source) 
+        : link.source;
+      const target = typeof link.target === "string" 
+        ? nodesById.get(link.target) 
+        : link.target;
 
-    const linksToDraw = hoveredNode ? disconnectedLinks : treeLinks;
-    linksToDraw.forEach(link => {
+      if (!source || !target) return;
+
+      const isConnected = isHovered && 
+        (connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id));
+
+      if (isHovered && !isConnected) {
+        ctx.strokeStyle = "rgba(150, 150, 150, 0.1)";
+        ctx.lineWidth = 0.5 / transform.k;
+      } else if (isConnected) {
+        ctx.strokeStyle = "rgba(147, 112, 219, 0.9)";
+        ctx.lineWidth = 2.5 / transform.k;
+        ctx.shadowColor = "rgba(147, 112, 219, 0.6)";
+        ctx.shadowBlur = 10 / transform.k;
+      } else {
+        ctx.strokeStyle = "rgba(100, 100, 100, 0.4)";
+        ctx.lineWidth = 1.2 / transform.k;
+      }
+
       ctx.beginPath();
-      ctx.moveTo(link.source.x, link.source.y);
-      
-      // Curved connection for tree
-      const midX = (link.source.x + link.target.x) / 2;
-      ctx.bezierCurveTo(
-        midX, link.source.y,
-        midX, link.target.y,
-        link.target.x, link.target.y
-      );
+      ctx.moveTo(source.x, source.y);
+      ctx.lineTo(target.x, target.y);
       ctx.stroke();
+
+      if (isConnected) {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+      }
     });
 
-    // Draw connected links (highlighted)
-    if (hoveredNode && connectedLinks.length > 0) {
-      ctx.strokeStyle = "rgba(147, 112, 219, 0.8)";
-      ctx.lineWidth = 2.5 / transform.k;
-      ctx.shadowColor = "rgba(147, 112, 219, 0.5)";
-      ctx.shadowBlur = 8 / transform.k;
-
-      connectedLinks.forEach(link => {
-        ctx.beginPath();
-        ctx.moveTo(link.source.x, link.source.y);
-        const midX = (link.source.x + link.target.x) / 2;
-        ctx.bezierCurveTo(
-          midX, link.source.y,
-          midX, link.target.y,
-          link.target.x, link.target.y
-        );
-        ctx.stroke();
-      });
-
-      ctx.shadowColor = "transparent";
-      ctx.shadowBlur = 0;
-    }
-
     // Draw nodes
-    treeNodes.forEach(node => {
-      const isHovered = hoveredNode?.id === node.id;
-      const isConnected = hoveredNode && connectedNodeIds.has(node.id);
+    forceNodes.forEach(node => {
+      const isNodeHovered = hoveredNode?.id === node.id;
+      const isConnected = isHovered && connectedNodeIds.has(node.id);
       const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
 
-      // Dim non-connected nodes when hovering
-      if (hoveredNode && !isHovered && !isConnected) {
-        ctx.globalAlpha = 0.3;
+      // Dim non-connected nodes
+      if (isHovered && !isConnected) {
+        ctx.globalAlpha = 0.25;
       }
 
       // Node circle
@@ -233,77 +249,45 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
       ctx.fill();
 
       // Border
-      ctx.lineWidth = (isHovered ? 4 : isConnected ? 3 : 2) / transform.k;
+      ctx.lineWidth = (isNodeHovered ? 4 : isConnected ? 3 : 2) / transform.k;
       ctx.strokeStyle = isConnected ? "#9370DB" : node.isMatch ? "#FFC107" : node.borderColor;
       ctx.stroke();
 
       // Highlight
-      if (isHovered || isConnected) {
+      if (isNodeHovered || isConnected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
-        ctx.strokeStyle = isHovered ? "rgba(255, 193, 7, 0.6)" : "rgba(147, 112, 219, 0.4)";
+        ctx.strokeStyle = isNodeHovered ? "rgba(255, 193, 7, 0.6)" : "rgba(147, 112, 219, 0.5)";
         ctx.lineWidth = 3 / transform.k;
         ctx.stroke();
       }
 
-      // Reset alpha
       ctx.globalAlpha = 1;
 
-      // Level badge (always visible)
+      // Level badge (always visible on top)
       const badgeRadius = Math.max(7, 9 / transform.k);
       const badgeY = node.y - radius - badgeRadius / 2;
       
-      // Badge background
       ctx.beginPath();
       ctx.arc(node.x, badgeY, badgeRadius, 0, Math.PI * 2);
       ctx.fillStyle = isConnected ? "#9370DB" : node.level === 0 ? "#7B1FA2" : "#3B82F6";
       ctx.fill();
       
-      // Badge border
       ctx.lineWidth = 1 / transform.k;
       ctx.strokeStyle = "white";
       ctx.stroke();
       
-      // Level number
       ctx.fillStyle = "white";
       ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(String(node.level), node.x, badgeY);
 
-      // Label
-      if (isHovered || isConnected || transform.k > 0.6) {
-        const labelY = node.y + radius + 14 / transform.k;
-        const fontSize = Math.max(10, 11 / transform.k);
-        
-        ctx.font = `${isHovered || isConnected ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        
-        // Background
-        const metrics = ctx.measureText(node.label);
-        const padding = 3 / transform.k;
-        ctx.fillStyle = isHovered || isConnected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.9)";
-        ctx.beginPath();
-        ctx.roundRect(
-          node.x - metrics.width / 2 - padding,
-          labelY - padding,
-          metrics.width + padding * 2,
-          fontSize + padding * 2,
-          3 / transform.k
-        );
-        ctx.fill();
-        
-        // Text
-        ctx.fillStyle = isConnected ? "#9370DB" : "#1F2937";
-        ctx.fillText(node.label, node.x, labelY);
-      }
-
-      // Child count indicator
-      if (node.children && node.children.length > 0 && transform.k > 0.7) {
+      // Child count badge (if has children)
+      if (node.childIds.length > 0 && transform.k > 0.6) {
         const countRadius = Math.max(8, 10 / transform.k);
-        const countX = node.x + radius + countRadius / 2;
-        const countY = node.y - radius / 2;
+        const countX = node.x + radius * 0.7;
+        const countY = node.y - radius * 0.7;
         
         ctx.beginPath();
         ctx.arc(countX, countY, countRadius, 0, Math.PI * 2);
@@ -314,12 +298,38 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
         ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(node.children.length), countX, countY);
+        ctx.fillText(String(node.childIds.length), countX, countY);
+      }
+
+      // Label
+      if (isNodeHovered || isConnected || transform.k > 0.7) {
+        const labelY = node.y + radius + 14 / transform.k;
+        const fontSize = Math.max(10, 11 / transform.k);
+        
+        ctx.font = `${isNodeHovered || isConnected ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        
+        const metrics = ctx.measureText(node.label);
+        const padding = 3 / transform.k;
+        ctx.fillStyle = isNodeHovered || isConnected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.95)";
+        ctx.beginPath();
+        ctx.roundRect(
+          node.x - metrics.width / 2 - padding,
+          labelY - padding,
+          metrics.width + padding * 2,
+          fontSize + padding * 2,
+          3 / transform.k
+        );
+        ctx.fill();
+        
+        ctx.fillStyle = isConnected ? "#9370DB" : "#1F2937";
+        ctx.fillText(node.label, node.x, labelY);
       }
     });
 
     ctx.restore();
-  }, [treeNodes, treeLinks, hoveredNode]);
+  }, [forceNodes, forceLinks, nodesById, hoveredNode, dimensions]);
 
   // Animation loop
   useEffect(() => {
@@ -335,45 +345,57 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     };
   }, [render]);
 
-  // Initialize zoom with fit
+  // Force simulation
+  useEffect(() => {
+    if (forceNodes.length === 0 || dimensions.width === 0) {
+      return undefined;
+    }
+
+    if (simulationRef.current) {
+      simulationRef.current.stop();
+    }
+
+    const simulation = forceSimulation(forceNodes as SimulationNodeDatum[])
+      // Repulsion
+      .force("charge", forceManyBody().strength(-400).distanceMax(500))
+      // Center gravity
+      .force("center", forceCenter(dimensions.width / 2, dimensions.height / 2).strength(0.05))
+      // Links with strong bond
+      .force("link", 
+        forceLink(forceLinks as SimulationLinkDatum<SimulationNodeDatum>[])
+          .id((d: SimulationNodeDatum) => (d as ForceNode).id)
+          .distance(80)
+          .strength(0.7)
+      )
+      // Collision
+      .force("collide", forceCollide().radius(30).strength(0.8))
+      // Keep nodes near their initial level-based position
+      .force("x", forceX((d: SimulationNodeDatum) => (d as ForceNode).initialX).strength(0.03))
+      .force("y", forceY((d: SimulationNodeDatum) => (d as ForceNode).initialY).strength(0.03))
+      .alphaDecay(0.02)
+      .velocityDecay(0.4);
+
+    simulationRef.current = simulation;
+    simulation.tick(80);
+
+    return () => {
+      simulation.stop();
+    };
+  }, [forceNodes, forceLinks, dimensions]);
+
+  // Zoom
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || treeNodes.length === 0) return;
+    if (!canvas) return;
 
     const zoomBehavior = zoom<HTMLCanvasElement, unknown>()
-      .scaleExtent([0.2, 4])
+      .scaleExtent([0.3, 4])
       .on("zoom", (event) => {
         transformRef.current = event.transform;
       });
 
-    const selection = select(canvas);
-    selection.call(zoomBehavior);
-
-    // Auto-fit to show all nodes
-    const minX = Math.min(...treeNodes.map(n => n.x));
-    const maxX = Math.max(...treeNodes.map(n => n.x));
-    const minY = Math.min(...treeNodes.map(n => n.y));
-    const maxY = Math.max(...treeNodes.map(n => n.y));
-    
-    const width = maxX - minX;
-    const height = maxY - minY;
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    
-    const scale = Math.min(
-      (canvasWidth - 100) / width,
-      (canvasHeight - 100) / height,
-      1.2
-    );
-    
-    const translateX = (canvasWidth - width * scale) / 2 - minX * scale;
-    const translateY = (canvasHeight - height * scale) / 2 - minY * scale;
-    
-    selection.call(
-      zoomBehavior.transform,
-      zoomIdentity.translate(translateX, translateY).scale(scale)
-    );
-  }, [treeNodes]);
+    select(canvas).call(zoomBehavior);
+  }, []);
 
   // Resize
   useEffect(() => {
@@ -400,23 +422,23 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
     const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
     const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-    let closest: TreeNode | null = null;
+    let closest: ForceNode | null = null;
     let minDist = Infinity;
 
-    treeNodes.forEach((node) => {
+    forceNodes.forEach((node) => {
       const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
       const dx = x - node.x;
       const dy = y - node.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < radius + 5 && dist < minDist) {
+      if (dist < radius + 8 && dist < minDist) {
         minDist = dist;
         closest = node;
       }
     });
 
     setHoveredNode(closest);
-  }, [treeNodes]);
+  }, [forceNodes]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -434,12 +456,12 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
             left: 16,
             bottom: 16,
             padding: "14px 18px",
-            background: "rgba(0, 0, 0, 0.9)",
+            background: "rgba(0, 0, 0, 0.92)",
             borderRadius: "10px",
             color: "white",
             fontSize: "13px",
             zIndex: 20,
-            maxWidth: "280px",
+            maxWidth: "300px",
             boxShadow: "0 4px 15px rgba(0,0,0,0.4)",
           }}
         >
@@ -464,13 +486,16 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
           <div style={{ color: "#D1D5DB", fontSize: "12px", lineHeight: 1.6 }}>
             <div><strong>Type:</strong> {hoveredNode.type}</div>
             <div><strong>ID:</strong> {hoveredNode.id}</div>
-            {hoveredNode.children && (
-              <div style={{ color: "#10B981", marginTop: "6px" }}>
-                👶 {hoveredNode.children.length} child{hoveredNode.children.length > 1 ? 'ren' : ''}
+            {hoveredNode.parentId && (
+              <div style={{ color: "#9CA3AF" }}>👆 Parent: {hoveredNode.parentId}</div>
+            )}
+            {hoveredNode.childIds.length > 0 && (
+              <div style={{ color: "#10B981", marginTop: "4px" }}>
+                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? 'ren' : ''}
               </div>
             )}
             {hoveredNode.level === 0 && (
-              <div style={{ color: "#F59E0B", marginTop: "4px" }}>🌟 Root Node</div>
+              <div style={{ color: "#F59E0B", marginTop: "4px" }}>🌟 Core Node</div>
             )}
           </div>
         </div>
