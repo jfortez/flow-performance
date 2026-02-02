@@ -40,6 +40,18 @@
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 }
 
+.good {
+  color: #10b981;
+}
+
+.warning {
+  color: #f59e0b;
+}
+
+.danger {
+  color: #ef4444;
+}
+
 .divider {
   width: 1px;
   height: 24px;

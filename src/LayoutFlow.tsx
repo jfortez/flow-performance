@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -13,9 +13,10 @@ import { DagreView } from "./components/views/DagreView";
 import { RadialView } from "./components/views/RadialView";
 import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
-import { D3SimpleView } from "./components/views/D3SimpleView";
+import { D3SimpleView, type LayoutMode, type CollisionMode } from "./components/views/D3SimpleView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
 import { UnifiedControls, BottomSearchBar } from "./components/controls/UnifiedControls";
+import { D3SimpleControls } from "./components/controls/D3SimpleControls";
 import { NodeExplorerControl } from "./components/controls/NodeExplorerControl";
 import { LocalViewControls } from "./components/controls/LocalViewControls";
 import { LocalView } from "./components/views/LocalView";
@@ -34,6 +35,10 @@ function LayoutFlowContent() {
   const [neighborLevels, setNeighborLevels] = useState(2);
   const [overviewLayout, setOverviewLayout] = useState<"cluster" | "tree">("cluster");
 
+  // D3SimpleView specific controls
+  const [d3LayoutMode, setD3LayoutMode] = useState<LayoutMode>("concentric");
+  const [d3CollisionMode, setD3CollisionMode] = useState<CollisionMode>("full");
+
   const { currentView, setCurrentView } = useViewState("d3simple");
 
   const { nodes, edges } = useMemo(() => {
@@ -49,6 +54,31 @@ function LayoutFlowContent() {
   }, [config.nodeCount, config.maxDepth, currentView]);
 
   const { searchTerm, setSearchTerm, searchResults, matchedNodes, hasMatches } = useSearch(nodes);
+
+  // FPS Counter
+  const [fps, setFps] = useState(0);
+  useEffect(() => {
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let rafId: number;
+
+    const loop = () => {
+      const now = performance.now();
+      const delta = now - lastTime;
+
+      if (delta >= 1000) {
+        setFps(Math.round((frameCount * 1000) / delta));
+        frameCount = 0;
+        lastTime = now;
+      }
+
+      frameCount++;
+      rafId = requestAnimationFrame(loop);
+    };
+
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
 
   const handleConfigChange = useCallback((newConfig: GraphConfig) => {
     setConfig(newConfig);
@@ -77,7 +107,13 @@ function LayoutFlowContent() {
       case "d3cluster":
         return <D3ClusterView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
       case "d3simple":
-        return <D3SimpleView {...commonProps} />;
+        return (
+          <D3SimpleView
+            {...commonProps}
+            layoutMode={d3LayoutMode}
+            collisionMode={d3CollisionMode}
+          />
+        );
       case "local":
         return (
           <LocalView
@@ -122,10 +158,20 @@ function LayoutFlowContent() {
             />
           </div>
         )}
+        {currentView === "d3simple" && (
+          <div className={styles.viewControls}>
+            <D3SimpleControls
+              layoutMode={d3LayoutMode}
+              onLayoutModeChange={setD3LayoutMode}
+              collisionMode={d3CollisionMode}
+              onCollisionModeChange={setD3CollisionMode}
+            />
+          </div>
+        )}
       </div>
 
       {/* Panel derecho - Métricas */}
-      <Metrics nodesLength={nodes.length} edgesLength={edges.length} />
+      <Metrics nodesLength={nodes.length} edgesLength={edges.length} fps={fps} />
 
       {/* Barra de búsqueda inferior centrada */}
       <BottomSearchBar

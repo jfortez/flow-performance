@@ -35,9 +35,24 @@ interface D3SimpleViewProps {
   searchResults: Array<{ node: CustomNode; matches: boolean }>;
 }
 
-type LayoutMode = "concentric" | "progressive" | "hierarchical";
+export type LayoutMode = "concentric" | "progressive" | "hierarchical";
+export type CollisionMode = "full" | "minimal" | "none";
 
-export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps) => {
+interface D3SimpleViewProps {
+  nodes: CustomNode[];
+  edges: Edge[];
+  searchResults: Array<{ node: CustomNode; matches: boolean }>;
+  layoutMode?: LayoutMode;
+  collisionMode?: CollisionMode;
+}
+
+export const D3SimpleView = ({ 
+  nodes, 
+  edges, 
+  searchResults,
+  layoutMode = "concentric",
+  collisionMode = "full"
+}: D3SimpleViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulationRef = useRef<ReturnType<typeof forceSimulation> | null>(null);
@@ -45,8 +60,6 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
   const rafRef = useRef<number | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [hoveredNode, setHoveredNode] = useState<ForceNode | null>(null);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("concentric");
-  const [collisionMode, setCollisionMode] = useState<"full" | "minimal" | "none">("full");
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {
@@ -566,93 +579,6 @@ export const D3SimpleView = ({ nodes, edges, searchResults }: D3SimpleViewProps)
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
-      {/* Layout Mode Control */}
-      <div
-        style={{
-          position: "absolute",
-          top: 16,
-          right: 16,
-          zIndex: 20,
-          display: "flex",
-          gap: "8px",
-          padding: "8px",
-          background: "rgba(255, 255, 255, 0.95)",
-          borderRadius: "8px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-        }}
-      >
-        {[
-          { id: "concentric" as LayoutMode, label: "Concentric", desc: "Circular rings" },
-          { id: "progressive" as LayoutMode, label: "Progressive", desc: "Exponential spacing" },
-          { id: "hierarchical" as LayoutMode, label: "Tree", desc: "Branch-like layout" },
-        ].map((mode) => (
-          <button
-            key={mode.id}
-            onClick={() => setLayoutMode(mode.id)}
-            title={mode.desc}
-            style={{
-              padding: "6px 12px",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: layoutMode === mode.id ? "600" : "400",
-              background: layoutMode === mode.id ? "#3B82F6" : "transparent",
-              color: layoutMode === mode.id ? "white" : "#374151",
-              transition: "all 0.2s ease",
-            }}
-          >
-            {mode.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Collision Mode Selector */}
-      <div
-        style={{
-          position: "absolute",
-          top: 60,
-          right: 16,
-          zIndex: 20,
-          display: "flex",
-          flexDirection: "column",
-          gap: "4px",
-          padding: "8px",
-          background: "rgba(255, 255, 255, 0.95)",
-          borderRadius: "8px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-        }}
-      >
-        <div style={{ fontSize: "11px", color: "#6B7280", fontWeight: 600, marginBottom: "4px" }}>
-          Collision
-        </div>
-        {[
-          { id: "full", label: "Full", desc: "Strong repulsion" },
-          { id: "minimal", label: "Minimal", desc: "Light spacing" },
-          { id: "none", label: "None", desc: "No collision" },
-        ].map((mode) => (
-          <button
-            key={mode.id}
-            onClick={() => setCollisionMode(mode.id as "full" | "minimal" | "none")}
-            title={mode.desc}
-            style={{
-              padding: "4px 8px",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "11px",
-              fontWeight: collisionMode === mode.id ? "600" : "400",
-              background: collisionMode === mode.id ? "#3B82F6" : "transparent",
-              color: collisionMode === mode.id ? "white" : "#374151",
-              transition: "all 0.2s ease",
-              textAlign: "left",
-            }}
-          >
-            {mode.label}
-          </button>
-        ))}
-      </div>
-
       <canvas
         ref={canvasRef}
         style={{ width: "100%", height: "100%", cursor: hoveredNode ? "pointer" : "grab" }}
