@@ -1,7 +1,7 @@
 import "react";
 import styles from "./D3SimpleControls.module.css";
 
-export type LayoutMode = "concentric" | "progressive" | "hierarchical";
+export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree";
 export type CollisionMode = "full" | "minimal" | "none";
 
 interface D3SimpleControlsProps {
@@ -27,6 +27,7 @@ export const D3SimpleControls = ({
               { id: "concentric", label: "Concentric" },
               { id: "progressive", label: "Progressive" },
               { id: "hierarchical", label: "Tree" },
+              { id: "radial-tree", label: "Radial" },
             ].map((mode) => (
               <button
                 key={mode.id}

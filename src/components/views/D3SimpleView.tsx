@@ -35,7 +35,7 @@ interface D3SimpleViewProps {
   searchResults: Array<{ node: CustomNode; matches: boolean }>;
 }
 
-export type LayoutMode = "concentric" | "progressive" | "hierarchical";
+export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree";
 export type CollisionMode = "full" | "minimal" | "none";
 
 interface D3SimpleViewProps {
@@ -102,6 +102,63 @@ export const D3SimpleView = ({
     // Calculate positions based on layout mode
     const getInitialPosition = (level: number, index: number, levelNodes: CustomNode[]): { x: number; y: number } => {
       switch (layoutMode) {
+        case "radial-tree":
+          // Radial tree layout - distributes nodes in a tree-like structure without overlap
+          if (level === 0) {
+            return { x: centerX, y: centerY };
+          }
+          
+          // Calculate available angle range for this level based on parent
+          const parentId = parentMap.get(levelNodes[index].id);
+          if (parentId) {
+            const parentNode = nodesByIdMap.get(parentId);
+            
+            if (parentNode) {
+              const siblings = childrenMap.get(parentId) || [];
+              const siblingIndex = siblings.indexOf(levelNodes[index].id);
+              const totalSiblings = siblings.length;
+              
+              // Calculate base angle from parent's position
+              let parentAngle = Math.atan2(parentNode.y - centerY, parentNode.x - centerX);
+              
+              // Calculate angle spread based on level (wider at outer levels)
+              const baseSpread = Math.PI / 4; // 45 degrees base
+              const levelMultiplier = 1 + (level * 0.3); // Increase spread with level
+              const angleSpread = baseSpread * levelMultiplier;
+              
+              // Calculate angle for this node
+              let angleOffset = 0;
+              if (totalSiblings > 1) {
+                angleOffset = (siblingIndex - (totalSiblings - 1) / 2) * (angleSpread / (totalSiblings - 1));
+              }
+              
+              // Ensure we don't go beyond reasonable angles
+              const maxAngleDeviation = Math.PI / 2.5; // Max 72 degrees from parent direction
+              angleOffset = Math.max(-maxAngleDeviation, Math.min(maxAngleDeviation, angleOffset));
+              
+              const angle = parentAngle + angleOffset;
+              
+              // Calculate radius with spacing to prevent overlap
+              // More space for outer levels
+              const baseRadius = 120;
+              const radiusStep = 100;
+              const radius = baseRadius + (level - 1) * radiusStep + (siblingIndex * 20);
+              
+              return {
+                x: centerX + Math.cos(angle) * radius,
+                y: centerY + Math.sin(angle) * radius,
+              };
+            }
+          }
+          // Fallback
+          const fallbackRadius = 150 + (level - 1) * 100;
+          const fallbackAngleStep = (2 * Math.PI) / levelNodes.length;
+          const fallbackAngle = fallbackAngleStep * index;
+          return {
+            x: centerX + Math.cos(fallbackAngle) * fallbackRadius,
+            y: centerY + Math.sin(fallbackAngle) * fallbackRadius,
+          };
+        
         case "progressive":
           // Progressive radial spacing: exponential growth
           const progressiveRadius = level === 0 ? 0 : 150 * Math.pow(1.8, level - 1);
@@ -119,35 +176,35 @@ export const D3SimpleView = ({
           }
           
           // Calculate angular sector for each parent
-          const parentId = parentMap.get(levelNodes[index].id);
-          if (parentId) {
-            const parentNode = nodesByIdMap.get(parentId);
-            if (parentNode) {
+          const hierParentId = parentMap.get(levelNodes[index].id);
+          if (hierParentId) {
+            const hierParentNode = nodesByIdMap.get(hierParentId);
+            if (hierParentNode) {
               // Get siblings
-              const siblings = childrenMap.get(parentId) || [];
-              const siblingIndex = siblings.indexOf(levelNodes[index].id);
-              const totalSiblings = siblings.length;
+              const hierSiblings = childrenMap.get(hierParentId) || [];
+              const hierSiblingIndex = hierSiblings.indexOf(levelNodes[index].id);
+              const hierTotalSiblings = hierSiblings.length;
               
               // Calculate angle based on parent's position and sibling index
-              const parentAngle = Math.atan2(parentNode.y - centerY, parentNode.x - centerX);
-              const angleSpread = Math.PI / 3; // 60 degrees spread
-              const angleOffset = (siblingIndex - (totalSiblings - 1) / 2) * (angleSpread / Math.max(totalSiblings - 1, 1));
-              const angle = parentAngle + angleOffset;
+              const hierParentAngle = Math.atan2(hierParentNode.y - centerY, hierParentNode.x - centerX);
+              const hierAngleSpread = Math.PI / 3; // 60 degrees spread
+              const hierAngleOffset = (hierSiblingIndex - (hierTotalSiblings - 1) / 2) * (hierAngleSpread / Math.max(hierTotalSiblings - 1, 1));
+              const hierAngle = hierParentAngle + hierAngleOffset;
               
-              const hierarchicalRadius = 180 + (level - 1) * 120;
+              const hierRadius = 180 + (level - 1) * 120;
               return {
-                x: centerX + Math.cos(angle) * hierarchicalRadius,
-                y: centerY + Math.sin(angle) * hierarchicalRadius,
+                x: centerX + Math.cos(hierAngle) * hierRadius,
+                y: centerY + Math.sin(hierAngle) * hierRadius,
               };
             }
           }
           // Fallback to concentric
-          const fallbackRadius = level * 200;
-          const fallbackAngleStep = (2 * Math.PI) / levelNodes.length;
-          const fallbackAngle = fallbackAngleStep * index;
+          const hierFallbackRadius = level * 200;
+          const hierFallbackAngleStep = (2 * Math.PI) / levelNodes.length;
+          const hierFallbackAngle = hierFallbackAngleStep * index;
           return {
-            x: centerX + Math.cos(fallbackAngle) * fallbackRadius,
-            y: centerY + Math.sin(fallbackAngle) * fallbackRadius,
+            x: centerX + Math.cos(hierFallbackAngle) * hierFallbackRadius,
+            y: centerY + Math.sin(hierFallbackAngle) * hierFallbackRadius,
           };
         
         case "concentric":
@@ -458,6 +515,17 @@ export const D3SimpleView = ({
     let centerStrength = 0.02;
 
     switch (layoutMode) {
+      case "radial-tree":
+        // Radial tree mode: strong positioning to maintain tree structure, minimal repulsion
+        chargeStrength = -300;
+        chargeDistanceMax = 600;
+        linkDistance = 100;
+        linkStrength = 0.9;
+        collideRadius = 35;
+        positionStrength = 0.08;
+        centerStrength = 0.05;
+        break;
+      
       case "progressive":
         // Progressive mode: stronger repulsion, weaker positioning
         chargeStrength = -1200;
