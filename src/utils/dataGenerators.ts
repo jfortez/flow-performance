@@ -33,7 +33,7 @@ const getNodeStyle = (type: NodeType, status: NodeStatus, isCore = false) => {
   };
 
   const colorSet = typeColors[type];
-  
+
   // Grosor del borde según status
   let borderWidth = "3px";
   if (status === "completed") borderWidth = "2px";
@@ -210,7 +210,7 @@ export const generateLargeFirstLevel = (
 };
 
 export const generateHierarchicalData = (
-  rootChildrenCount: number = 150,
+  totalNodes: number = 150,
   maxDepth: number = 2,
   childrenPerNode: number = 3
 ): { nodes: CustomNode[]; edges: Edge[]; totalNodes: number } => {
@@ -231,7 +231,7 @@ export const generateHierarchicalData = (
         description: "Núcleo principal del sistema",
       },
       isExpanded: true,
-      childCount: rootChildrenCount,
+      childCount: Math.min(totalNodes - 1, childrenPerNode),
     },
     style: {
       ...getNodeStyle("core", "active", true),
@@ -241,10 +241,12 @@ export const generateHierarchicalData = (
   };
 
   nodes.push(coreNode);
+  nodeCounter++;
 
   // Create first level children
   const firstLevelNodes: CustomNode[] = [];
-  for (let i = 0; i < rootChildrenCount; i++) {
+  const firstLevelCount = Math.min(childrenPerNode, totalNodes - nodeCounter);
+  for (let i = 0; i < firstLevelCount && nodeCounter < totalNodes; i++) {
     nodeCounter++;
     const nodeId = `node-${i}`;
     const type = getRandomType(1);
@@ -262,8 +264,8 @@ export const generateHierarchicalData = (
           createdAt: new Date().toISOString(),
           description: `Child node ${i}`,
         },
-        isExpanded: maxDepth > 2,
-        childCount: maxDepth > 2 ? childrenPerNode : 0,
+        isExpanded: maxDepth > 1,
+        childCount: maxDepth > 1 ? childrenPerNode : 0,
       },
       style: getNodeStyle(type, status),
     };
@@ -279,15 +281,17 @@ export const generateHierarchicalData = (
     });
   }
 
-  // Create deeper levels if maxDepth > 2
-  if (maxDepth > 2) {
+  // Create deeper levels if maxDepth > 1
+  if (maxDepth > 1 && nodeCounter < totalNodes) {
     let currentLevelNodes = firstLevelNodes;
-    
-    for (let level = 2; level < maxDepth; level++) {
+
+    for (let level = 2; level <= maxDepth && currentLevelNodes.length > 0; level++) {
       const nextLevelNodes: CustomNode[] = [];
-      
+
       for (const parentNode of currentLevelNodes) {
-        for (let j = 0; j < childrenPerNode; j++) {
+        if (nodeCounter >= totalNodes) break;
+
+        for (let j = 0; j < childrenPerNode && nodeCounter < totalNodes; j++) {
           nodeCounter++;
           const nodeId = `${parentNode.id}-${j}`;
           const type = getRandomType(level);
@@ -305,8 +309,8 @@ export const generateHierarchicalData = (
                 createdAt: new Date().toISOString(),
                 description: `Level ${level} node`,
               },
-              isExpanded: level < maxDepth - 1,
-              childCount: level < maxDepth - 1 ? childrenPerNode : 0,
+              isExpanded: level < maxDepth,
+              childCount: level < maxDepth ? childrenPerNode : 0,
             },
             style: getNodeStyle(type, status),
           };
@@ -322,10 +326,10 @@ export const generateHierarchicalData = (
           });
         }
       }
-      
+
       currentLevelNodes = nextLevelNodes;
     }
   }
 
-  return { nodes, edges, totalNodes: nodeCounter + 1 };
+  return { nodes, edges, totalNodes: nodeCounter };
 };
