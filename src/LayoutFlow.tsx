@@ -48,7 +48,7 @@ function LayoutFlowContent() {
       currentView === "d3simple" ||
       currentView === "local"
     ) {
-      return generateHierarchicalData(config.nodeCount, config.maxDepth, 3);
+      return generateHierarchicalData(config.nodeCount, config.maxDepth);
     }
     return generateLargeFirstLevel(config.nodeCount);
   }, [config.nodeCount, config.maxDepth, currentView]);
