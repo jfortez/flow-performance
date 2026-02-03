@@ -696,13 +696,21 @@ export const D3SimpleView = ({
 
     const zoomBehavior = zoom<HTMLCanvasElement, unknown>()
       .scaleExtent([0.3, 4])
+      .filter((event) => {
+        // Allow zoom on wheel events always
+        if (event.type === "wheel") return true;
+        // Disable zoom when dragging a node or when hovering a node (to allow click/drag)
+        if (draggedNode || hoveredNode) return false;
+        // Allow zoom on background drag (pan)
+        return true;
+      })
       .on("zoom", (event) => {
         transformRef.current = event.transform;
         setViewportTransform({ x: event.transform.x, y: event.transform.y, k: event.transform.k });
       });
 
     select(canvas).call(zoomBehavior);
-  }, []);
+  }, [draggedNode, hoveredNode]);
 
   // Resize
   useEffect(() => {
