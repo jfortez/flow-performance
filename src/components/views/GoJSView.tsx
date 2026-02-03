@@ -106,119 +106,257 @@ export const GoJSView = ({
     });
   }, []);
 
-  // Initialize diagram
+  // Initialize diagram - EXACT implementation from incrementalTree
   useEffect(() => {
     const container = diagramRef.current;
     if (!container) return;
 
     const $ = go.GraphObject.make;
 
-    // Create diagram with ForceDirectedLayout
+    // Create diagram with ForceDirectedLayout - optimized for radial distribution
     const myDiagram = $(go.Diagram, container, {
       initialContentAlignment: go.Spot.Center,
       layout: $(go.ForceDirectedLayout, {
-        defaultSpringLength: 100,
-        defaultElectricalCharge: 150,
-        infinityDistance: 50,
+        defaultSpringLength: 180,
+        defaultElectricalCharge: 800,
+        defaultGravitationalMass: 0,
+        infinityDistance: 250,
+        maxIterations: 1000,
+        epsilonDistance: 0.05,
       }),
       "commandHandler.copiesTree": true,
       "commandHandler.deletesTree": true,
       "draggingTool.dragsTree": true,
       "undoManager.isEnabled": true,
+      initialAutoScale: go.AutoScale.Uniform,
     });
 
-    // Define the Node template - Botón personalizado en lugar de TreeExpanderButton
-    // Define the Node template - Label DEBAJO del nodo (como en D3Simple)
+    // Helper function to get connected nodes and links for highlighting
+    const getConnectedParts = (node: go.Node): { nodes: Set<go.Node>; links: Set<go.Link> } => {
+      const nodes = new Set<go.Node>();
+      const links = new Set<go.Link>();
+
+      if (!node) return { nodes, links };
+
+      const nodeData = node.data;
+      const nodeLevel = nodeData?.level ?? 0;
+
+      // Always include the hovered node
+      nodes.add(node);
+
+      if (nodeLevel === 0) {
+        // Root node: highlight root + direct children + their edges
+        node.findNodesOutOf().each((child) => {
+          nodes.add(child);
+          const link = node.findLinksBetween(child).first();
+          if (link) links.add(link);
+        });
+      } else {
+        // Non-root node: highlight path from root to this node + descendants
+
+        // Find path to root
+        let current: go.Node | null = node;
+        while (current) {
+          nodes.add(current);
+          // Find parent
+          const parentLink = current.findLinksInto().first();
+          if (parentLink) {
+            links.add(parentLink);
+            current = parentLink.fromNode;
+          } else {
+            current = null;
+          }
+        }
+
+        // Find all descendants
+        const collectDescendants = (n: go.Node) => {
+          n.findNodesOutOf().each((child) => {
+            nodes.add(child);
+            const link = n.findLinksBetween(child).first();
+            if (link) links.add(link);
+            collectDescendants(child);
+          });
+        };
+
+        collectDescendants(node);
+      }
+
+      return { nodes, links };
+    };
+
+    // Helper function to apply highlighting
+    const applyHighlight = (node: go.Node) => {
+      const { nodes, links } = getConnectedParts(node);
+      
+      // Apply highlighting
+      myDiagram.nodes.each((n) => {
+        const shape = n.findObject("SHAPE") as go.Shape;
+        const textBlock = n.findObject("TEXTBLOCK") as go.TextBlock;
+        
+        if (nodes.has(n)) {
+          // Highlighted node
+          n.opacity = 1;
+          if (shape) {
+            shape.stroke = "#8B5CF6"; // Purple border
+            // Keep strokeWidth at 2 to avoid layout shift
+          }
+          if (textBlock) {
+            textBlock.stroke = "#8B5CF6"; // Purple text
+            // Keep original font, only change color
+          }
+        } else {
+          // Dimmed node
+          n.opacity = 0.15;
+        }
+      });
+      
+      myDiagram.links.each((l) => {
+        const shape = l.findObject("LINKSHAPE") as go.Shape;
+        const arrow = l.findObject("ARROW") as go.Shape;
+        
+        if (links.has(l)) {
+          // Highlighted link
+          l.opacity = 1;
+          if (shape) {
+            shape.stroke = "#8B5CF6";
+            // Keep strokeWidth at 1.5 to avoid layout shift
+          }
+          if (arrow) {
+            arrow.stroke = "#8B5CF6";
+            arrow.fill = "#8B5CF6";
+          }
+        } else {
+          // Dimmed link
+          l.opacity = 0.05;
+        }
+      });
+    };
+
+    // Helper function to reset highlighting
+    const resetHighlight = () => {
+      // Reset all nodes and links
+      myDiagram.nodes.each((n) => {
+        n.opacity = 1;
+        const shape = n.findObject("SHAPE") as go.Shape;
+        const textBlock = n.findObject("TEXTBLOCK") as go.TextBlock;
+        
+        if (shape) {
+          shape.stroke = n.data?.borderColor || "#3b82f6";
+          // strokeWidth stays at 2, no need to reset
+        }
+        if (textBlock) {
+          textBlock.stroke = "#1F2937";
+          // Keep original font, only reset color
+        }
+      });
+      
+      myDiagram.links.each((l) => {
+        l.opacity = 1;
+        const shape = l.findObject("LINKSHAPE") as go.Shape;
+        const arrow = l.findObject("ARROW") as go.Shape;
+        
+        if (shape) {
+          shape.stroke = "rgba(100, 100, 100, 0.4)";
+          // strokeWidth stays at 1.5, no need to reset
+        }
+        if (arrow) {
+          arrow.stroke = "rgba(100, 100, 100, 0.4)";
+          arrow.fill = "rgba(100, 100, 100, 0.4)";
+        }
+      });
+    };
+
+    // Define the Node template - EXACT from incrementalTree but with label below
     myDiagram.nodeTemplate = $(go.Node, "Vertical", {
       selectionObjectName: "PANEL",
-      isTreeExpanded: false,
-      isTreeLeaf: false,
-      mouseEnter: (_e: go.InputEvent, node: go.GraphObject) => {
-        if (node instanceof go.Node) {
-          setHoveredNodeData(node.data);
-          const loc = node.location;
-          const point = myDiagram.transformDocToView(loc);
-          setTooltipPosition({ x: point.x, y: point.y - 40 });
-        }
-      },
-      mouseLeave: () => {
-        setHoveredNodeData(null);
-      },
     })
-      // Top part: Circle with expand button
+      .bind("visible", "visible")
+      // Top part: Circle with expand button (Spot panel)
       .add(
-        $(go.Panel, "Spot", { name: "PANEL" }).add(
-          // Main circle
-          $(go.Shape, "Circle", {
-            fill: "whitesmoke",
-            stroke: "black",
-            strokeWidth: 2,
-          })
-            .bind("fill", "color")
-            .bind("stroke", "borderColor")
-            .bind("width", "level", (level) => (level === 0 ? 44 : level === 1 ? 36 : 30))
-            .bind("height", "level", (level) => (level === 0 ? 44 : level === 1 ? 36 : 30)),
-          // Expand/collapse button at top-right
-          $(go.Panel, "Spot", {
-            name: "EXPANDBUTTON",
-            width: 20,
-            height: 20,
-            alignment: go.Spot.TopRight,
-            alignmentFocus: go.Spot.Center,
-            cursor: "pointer",
-            visible: false,
-            click: (e: go.InputEvent, panel: go.GraphObject) => {
-              const node = panel.part as go.Node;
-              if (!node) return;
-              e.handled = true;
-
-              const nodeId = node.data.key;
-              const childIds = childrenMap.get(nodeId);
-
-              if (childIds && childIds.length > 0) {
-                toggleNodeCollapse(nodeId);
-
-                if (node.isTreeExpanded) {
-                  myDiagram.commandHandler.collapseTree(node);
-                } else {
-                  myDiagram.commandHandler.expandTree(node);
+        $(go.Panel, "Spot", { name: "PANEL" })
+          .add(
+            // Main circle
+            $(go.Shape, "Circle", {
+              name: "SHAPE",
+              fill: "whitesmoke",
+              stroke: "black",
+              strokeWidth: 2,
+              mouseEnter: (_e: go.InputEvent, shape: go.GraphObject) => {
+                const node = shape.part as go.Node;
+                if (node) {
+                  setHoveredNodeData(node.data);
+                  const loc = node.location;
+                  const point = myDiagram.transformDocToView(loc);
+                  setTooltipPosition({ x: point.x, y: point.y - 40 });
+                  applyHighlight(node);
                 }
-              }
-            },
-          })
-            .add(
-              $(go.Shape, "Circle", {
-                fill: "white",
-                stroke: "#64748b",
-                strokeWidth: 1.5,
-                width: 20,
-                height: 20,
-              }),
-            )
-            .add(
-              $(go.Shape, {
-                geometryString: "M -5 0 L 5 0",
-                stroke: "#64748b",
-                strokeWidth: 1.5,
-              }),
-            )
-            .add(
-              $(
-                go.Shape,
-                {
-                  geometryString: "M 0 -5 L 0 5",
-                  stroke: "#64748b",
-                  strokeWidth: 1.5,
-                  visible: false,
-                },
-                new go.Binding("visible", "isCollapsed"),
+              },
+              mouseLeave: () => {
+                setHoveredNodeData(null);
+                resetHighlight();
+              },
+            })
+              .bind("fill", "color")
+              .bind("stroke", "borderColor")
+              .bind("width", "level", (level) => (level === 0 ? 44 : level === 1 ? 36 : 30))
+              .bind("height", "level", (level) => (level === 0 ? 44 : level === 1 ? 36 : 30)),
+          )
+          // Custom expand/collapse button
+          .add(
+            $("Button", {
+              name: "EXPANDBUTTON",
+              width: 20,
+              height: 20,
+              alignment: go.Spot.TopRight,
+              alignmentFocus: go.Spot.Center,
+              click: (e: go.InputEvent, obj: go.GraphObject) => {
+                const node = obj.part as go.Node;
+                if (node === null) return;
+                e.handled = true;
+
+                const nodeId = node.data.key;
+                const childIds = childrenMap.get(nodeId);
+
+                if (childIds && childIds.length > 0) {
+                  toggleNodeCollapse(nodeId);
+                }
+              },
+            })
+              .bind("visible", "hasChildren")
+              // Button appearance
+              .add(
+                $(go.Shape, "Rectangle", {
+                  fill: "white",
+                  stroke: "#666",
+                  strokeWidth: 1,
+                  width: 16,
+                  height: 16,
+                }),
+              )
+              // Horizontal line (always visible)
+              .add(
+                $(go.Shape, "LineH", {
+                  stroke: "#333",
+                  strokeWidth: 2,
+                  width: 8,
+                  height: 2,
+                }),
+              )
+              // Vertical line (only when collapsed - shows as +)
+              .add(
+                $(go.Shape, "LineV", {
+                  stroke: "#333",
+                  strokeWidth: 2,
+                  width: 2,
+                  height: 8,
+                }).bind("visible", "isCollapsed"),
               ),
-            ),
-        ),
+          ),
       )
-      // Bottom part: Label
+      // Bottom part: Label (below the circle)
       .add(
         $(go.TextBlock, {
+          name: "TEXTBLOCK",
           font: "12px system-ui, sans-serif",
           margin: new go.Margin(8, 0, 0, 0),
           stroke: "#1F2937",
@@ -252,12 +390,14 @@ export const GoJSView = ({
     })
       .add(
         $(go.Shape, {
+          name: "LINKSHAPE",
           stroke: "rgba(100, 100, 100, 0.4)",
           strokeWidth: 1.5,
         }),
       )
       .add(
         $(go.Shape, {
+          name: "ARROW",
           toArrow: "Standard",
           stroke: "rgba(100, 100, 100, 0.4)",
           fill: "rgba(100, 100, 100, 0.4)",
@@ -286,20 +426,19 @@ export const GoJSView = ({
     // Helper to check if node should be visible
     const isNodeVisible = (nodeId: string): boolean => {
       const parentId = parentMap.get(nodeId);
-      if (!parentId) return true;
-      return !collapsedNodes.has(parentId);
+      if (!parentId) return true; // Root is always visible
+      return !collapsedNodes.has(parentId); // Visible if parent is NOT collapsed
     };
 
-    // Build visible nodes
+    // Build all nodes with visibility flag
     initialNodes.forEach((node) => {
-      if (!isNodeVisible(node.id)) return;
-
       const isMatch = searchResultsMap.get(node.id) ?? false;
       const style = (node.style as Record<string, string>) || {};
       const level = node.data.metadata.level;
       const childIds = childrenMap.get(node.id) || [];
       const hasChildren = childIds.length > 0;
       const isCollapsed = collapsedNodes.has(node.id);
+      const visible = isNodeVisible(node.id);
 
       nodeDataArray.push({
         key: node.id,
@@ -313,17 +452,16 @@ export const GoJSView = ({
         isCollapsed: isCollapsed,
         parentId: parentMap.get(node.id),
         childIds: childIds,
+        visible: visible,
       });
     });
 
-    // Build links for visible nodes
+    // Build all links - visibility handled by node binding
     initialEdges.forEach((edge) => {
-      if (isNodeVisible(edge.source) && isNodeVisible(edge.target)) {
-        linkDataArray.push({
-          from: edge.source,
-          to: edge.target,
-        });
-      }
+      linkDataArray.push({
+        from: edge.source,
+        to: edge.target,
+      });
     });
 
     diagram.model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
@@ -334,15 +472,7 @@ export const GoJSView = ({
     const diagram = diagramInstanceRef.current;
     if (hoveredNodeData && diagram) {
       const nodeId = hoveredNodeData.key;
-      const node = diagram.findNodeForKey(nodeId);
-      if (node) {
-        toggleNodeCollapse(nodeId);
-        if (node.isTreeExpanded) {
-          diagram.commandHandler.collapseTree(node);
-        } else {
-          diagram.commandHandler.expandTree(node);
-        }
-      }
+      toggleNodeCollapse(nodeId);
     }
   }, [hoveredNodeData, toggleNodeCollapse]);
 
