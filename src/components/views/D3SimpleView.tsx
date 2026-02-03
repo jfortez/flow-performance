@@ -16,7 +16,6 @@ import type { CustomNode } from "../../types";
 import { Toolbar } from "../controls/Toolbar";
 import { Overview } from "../controls/Overview";
 
-// Feature flags
 const ALLOW_SELECTION = true;
 const ALLOW_EXPAND_COLLAPSE = true;
 const ALLOW_ADD_DELETE = true;
@@ -78,24 +77,24 @@ export const D3SimpleView = ({
   const [isOverviewOpen, setIsOverviewOpen] = useState(true);
   const [viewportTransform, setViewportTransform] = useState({ x: 0, y: 0, k: 1 });
   const [allowNodeDrag, setAllowNodeDrag] = useState(true);
-  
+
   // Local state for nodes and edges (initialized from props)
   const [nodesState, setNodesState] = useState<CustomNode[]>(initialNodes);
   const [edgesState, setEdgesState] = useState<Edge[]>(initialEdges);
-  
+
   // Selection state
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
-  
+
   // Expand/collapse state
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
-  
+  const [isDragging, setIsDragging] = useState(false);
+
   // Drag state
-  const [draggedNode, setDraggedNode] = useState<ForceNode | null>(null);
+  const draggedNodeRef = useRef<ForceNode>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragStartPosRef = useRef({ x: 0, y: 0 });
-  const isDraggingRef = useRef(false);
   const clickedOnExpandButtonRef = useRef(false);
-  
+
   // Add/Delete popup state
   const [showNodePopup, setShowNodePopup] = useState(false);
   const [popupNode, setPopupNode] = useState<ForceNode | null>(null);
@@ -110,24 +109,35 @@ export const D3SimpleView = ({
     setEdgesState(initialEdges);
   }, [initialEdges]);
 
-  // Helper to get all descendants of a node (including nested)
-  const getAllDescendants = useCallback((nodeId: string, nodesById: Map<string, ForceNode>): Set<string> => {
-    const descendants = new Set<string>();
-    const node = nodesById.get(nodeId);
-    if (!node) return descendants;
-    
-    const addDescendants = (currentId: string) => {
-      const currentNode = nodesById.get(currentId);
-      if (!currentNode) return;
-      currentNode.childIds.forEach((childId) => {
-        descendants.add(childId);
-        addDescendants(childId);
-      });
-    };
-    
-    addDescendants(nodeId);
-    return descendants;
-  }, []);
+  const getAllDescendants = useCallback(
+    (nodeId: string, nodesById: Map<string, ForceNode>): Set<string> => {
+      const descendants = new Set<string>();
+      const node = nodesById.get(nodeId);
+      if (!node) return descendants;
+
+      const addDescendants = (currentId: string) => {
+        const currentNode = nodesById.get(currentId);
+        if (!currentNode) return;
+        currentNode.childIds.forEach((childId) => {
+          descendants.add(childId);
+          addDescendants(childId);
+        });
+      };
+
+      addDescendants(nodeId);
+      return descendants;
+    },
+    [],
+  );
+
+  // Memoize search results as Map for O(1) lookup instead of O(n) find
+  const searchResultsMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const result of searchResults) {
+      map.set(result.node.id, result.matches);
+    }
+    return map;
+  }, [searchResults]);
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById, visibleNodeIds } = useMemo(() => {
@@ -270,8 +280,7 @@ export const D3SimpleView = ({
 
     nodesByLevel.forEach((levelNodes, level) => {
       levelNodes.forEach((node, index) => {
-        const searchResult = searchResults.find((r) => r.node.id === node.id);
-        const isMatch = searchResult?.matches || false;
+        const isMatch = searchResultsMap.get(node.id) ?? false;
         const style = (node.style as Record<string, string>) || {};
 
         const { x: initialX, y: initialY } = getInitialPosition(level, index, levelNodes);
@@ -316,9 +325,16 @@ export const D3SimpleView = ({
       nodesById: nodesByIdMap,
       visibleNodeIds: visibleNodeIdsSet,
     };
-  }, [nodesState, edgesState, dimensions.width, dimensions.height, layoutMode, searchResults, collapsedNodes]);
+  }, [
+    nodesState,
+    edgesState,
+    dimensions.width,
+    dimensions.height,
+    layoutMode,
+    searchResultsMap,
+    collapsedNodes,
+  ]);
 
-  // Render function
   const render = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -516,11 +532,11 @@ export const D3SimpleView = ({
       if (ALLOW_EXPAND_COLLAPSE && node.childIds.length > 0 && transform.k > 0.6) {
         const isCollapsed = collapsedNodes.has(node.id);
         const btnRadius = Math.max(7, 9 / transform.k);
-        
+
         // Calculate position at the edge away from parent (towards children)
         let btnX: number;
         let btnY: number;
-        
+
         if (node.parentId && nodesById.has(node.parentId)) {
           const parentNode = nodesById.get(node.parentId)!;
           // Calculate angle from parent to node (opposite direction)
@@ -550,7 +566,7 @@ export const D3SimpleView = ({
         // Horizontal line
         ctx.moveTo(btnX - btnRadius * 0.4, btnY);
         ctx.lineTo(btnX + btnRadius * 0.4, btnY);
-        
+
         // Vertical line (only for plus/collapsed)
         if (isCollapsed) {
           ctx.moveTo(btnX, btnY - btnRadius * 0.4);
@@ -588,7 +604,18 @@ export const D3SimpleView = ({
     });
 
     ctx.restore();
-  }, [forceNodes, forceLinks, nodesById, hoveredNode, selectedNodes, collapsedNodes, dimensions, showLevelLabels, showChildCountProp, visibleNodeIds]);
+  }, [
+    forceNodes,
+    forceLinks,
+    nodesById,
+    hoveredNode,
+    selectedNodes,
+    collapsedNodes,
+    dimensions,
+    showLevelLabels,
+    showChildCountProp,
+    visibleNodeIds,
+  ]);
 
   // Animation loop
   useEffect(() => {
@@ -700,7 +727,7 @@ export const D3SimpleView = ({
         // Allow zoom on wheel events always
         if (event.type === "wheel") return true;
         // Disable zoom when dragging a node or when hovering a node (to allow click/drag)
-        if (draggedNode || hoveredNode) return false;
+        if (draggedNodeRef.current || hoveredNode) return false;
         // Allow zoom on background drag (pan)
         return true;
       })
@@ -710,7 +737,7 @@ export const D3SimpleView = ({
       });
 
     select(canvas).call(zoomBehavior);
-  }, [draggedNode, hoveredNode]);
+  }, [hoveredNode]);
 
   // Resize
   useEffect(() => {
@@ -729,93 +756,99 @@ export const D3SimpleView = ({
   }, []);
 
   // Get node at position (for click handling)
-  const getNodeAtPosition = useCallback((clientX: number, clientY: number): ForceNode | null => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
+  const getNodeAtPosition = useCallback(
+    (clientX: number, clientY: number): ForceNode | null => {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-    const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+      const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-    let closest: ForceNode | null = null;
-    let minDist = Infinity;
+      let closest: ForceNode | null = null;
+      let minDist = Infinity;
 
-    forceNodes.forEach((node) => {
-      const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
-      const dx = x - node.x;
-      const dy = y - node.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      forceNodes.forEach((node) => {
+        const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
+        const dx = x - node.x;
+        const dy = y - node.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < radius + 8 && dist < minDist) {
-        minDist = dist;
-        closest = node;
-      }
-    });
+        if (dist < radius + 8 && dist < minDist) {
+          minDist = dist;
+          closest = node;
+        }
+      });
 
-    return closest;
-  }, [forceNodes]);
+      return closest;
+    },
+    [forceNodes],
+  );
 
   // Check if clicking on expand/collapse button
-  const isClickOnExpandButton = useCallback((node: ForceNode, clientX: number, clientY: number): boolean => {
-    if (!ALLOW_EXPAND_COLLAPSE || node.childIds.length === 0) return false;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return false;
+  const isClickOnExpandButton = useCallback(
+    (node: ForceNode, clientX: number, clientY: number): boolean => {
+      if (!ALLOW_EXPAND_COLLAPSE || node.childIds.length === 0) return false;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-    const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+      const canvas = canvasRef.current;
+      if (!canvas) return false;
 
-    const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
-    const btnRadius = 9;
-    
-    // Calculate button position at edge towards children (away from parent)
-    let btnX: number;
-    let btnY: number;
-    
-    if (node.parentId && nodesById.has(node.parentId)) {
-      const parentNode = nodesById.get(node.parentId)!;
-      // Angle from parent to node (towards children)
-      const angle = Math.atan2(node.y - parentNode.y, node.x - parentNode.x);
-      btnX = node.x + Math.cos(angle) * radius;
-      btnY = node.y + Math.sin(angle) * radius;
-    } else {
-      // Root node - button at bottom
-      btnX = node.x;
-      btnY = node.y + radius;
-    }
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+      const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-    const dx = x - btnX;
-    const dy = y - btnY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+      const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
+      const btnRadius = Math.max(7, 9 / transformRef.current.k);
 
-    return dist <= btnRadius + 2;
-  }, [nodesById]);
+      // Calculate button position at edge towards children (away from parent)
+      let btnX: number;
+      let btnY: number;
+
+      if (node.parentId && nodesById.has(node.parentId)) {
+        const parentNode = nodesById.get(node.parentId)!;
+        // Angle from parent to node (towards children)
+        const angle = Math.atan2(node.y - parentNode.y, node.x - parentNode.x);
+        btnX = node.x + Math.cos(angle) * radius;
+        btnY = node.y + Math.sin(angle) * radius;
+      } else {
+        // Root node - button at bottom
+        btnX = node.x;
+        btnY = node.y + radius;
+      }
+
+      const dx = x - btnX;
+      const dy = y - btnY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      return dist <= btnRadius + 2 / transformRef.current.k;
+    },
+    [nodesById],
+  );
 
   // Handle node click for selection
-  const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!ALLOW_SELECTION) return;
-    
-    // Don't process click if we were dragging
-    if (isDraggingRef.current) {
-      isDraggingRef.current = false;
-      return;
-    }
-    
-    // Don't process click if we clicked on expand/collapse button
-    if (clickedOnExpandButtonRef.current) {
+  const handleCanvasClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!ALLOW_SELECTION) return;
+
+      // Don't process click if we were dragging
+      if (isDragging) {
+        setIsDragging(false);
+        clickedOnExpandButtonRef.current = false;
+        return;
+      }
+
+      const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
+
+      // Check if clicking on expand/collapse button (either from ref or direct check)
+      const wasExpandButtonClick =
+        clickedOnExpandButtonRef.current ||
+        (clickedNode ? isClickOnExpandButton(clickedNode, event.clientX, event.clientY) : false);
+
+      // Reset the ref
       clickedOnExpandButtonRef.current = false;
-      // Deselect node when clicking expand/collapse button
-      setSelectedNodes(new Set());
-      setShowNodePopup(false);
-      return;
-    }
 
-    const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
-
-    if (clickedNode) {
-      // Check if clicking on expand/collapse button
-      if (isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
+      if (clickedNode && wasExpandButtonClick) {
+        // Toggle expand/collapse
         setCollapsedNodes((prev) => {
           const newSet = new Set(prev);
           if (newSet.has(clickedNode.id)) {
@@ -831,69 +864,77 @@ export const D3SimpleView = ({
         return;
       }
 
-      // Handle selection
-      if (event.ctrlKey || event.metaKey) {
-        setSelectedNodes((prev) => {
-          const newSet = new Set(prev);
-          if (newSet.has(clickedNode.id)) {
-            newSet.delete(clickedNode.id);
-          } else {
-            newSet.add(clickedNode.id);
+      if (clickedNode) {
+        // Handle selection
+        if (event.ctrlKey || event.metaKey) {
+          setSelectedNodes((prev) => {
+            const newSet = new Set(prev);
+            if (newSet.has(clickedNode.id)) {
+              newSet.delete(clickedNode.id);
+            } else {
+              newSet.add(clickedNode.id);
+            }
+            return newSet;
+          });
+        } else {
+          // Select the node and show popup immediately
+          setSelectedNodes(new Set([clickedNode.id]));
+          if (ALLOW_ADD_DELETE) {
+            setPopupNode(clickedNode);
+            setPopupPosition({ x: event.clientX, y: event.clientY });
+            setShowNodePopup(true);
           }
-          return newSet;
-        });
-      } else {
-        // Select the node and show popup immediately
-        setSelectedNodes(new Set([clickedNode.id]));
-        if (ALLOW_ADD_DELETE) {
-          setPopupNode(clickedNode);
-          setPopupPosition({ x: event.clientX, y: event.clientY });
-          setShowNodePopup(true);
         }
+      } else {
+        // Click outside any node - close popup and deselect
+        setShowNodePopup(false);
+        setSelectedNodes(new Set());
       }
-    } else {
-      // Click outside any node - close popup and deselect
-      setShowNodePopup(false);
-      setSelectedNodes(new Set());
-    }
-  }, [getNodeAtPosition, isClickOnExpandButton]);
+    },
+    [getNodeAtPosition, isClickOnExpandButton, isDragging],
+  );
 
   // Handle mouse down for dragging
-  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
-    
-    // Check if clicking on expand/collapse button
-    if (clickedNode && isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
-      clickedOnExpandButtonRef.current = true;
-      return;
-    }
-    
-    clickedOnExpandButtonRef.current = false;
-    
-    if (!allowNodeDrag || !clickedNode) return;
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+      // Check if clicking on expand/collapse button
+      if (clickedNode && isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
+        clickedOnExpandButtonRef.current = true;
+        return;
+      }
 
-    const rect = canvas.getBoundingClientRect();
-    const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-    const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+      clickedOnExpandButtonRef.current = false;
 
-    dragOffsetRef.current = {
-      x: x - clickedNode.x,
-      y: y - clickedNode.y,
-    };
+      if (!allowNodeDrag || !clickedNode) return;
 
-    dragStartPosRef.current = { x: event.clientX, y: event.clientY };
-    isDraggingRef.current = false;
-    setDraggedNode(clickedNode);
-    
-    // Fix node position during drag
-    clickedNode.fx = clickedNode.x;
-    clickedNode.fy = clickedNode.y;
-    
-    simulationRef.current?.alpha(0.3).restart();
-  }, [allowNodeDrag, getNodeAtPosition, isClickOnExpandButton]);
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+      const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+      dragOffsetRef.current = {
+        x: x - clickedNode.x,
+        y: y - clickedNode.y,
+      };
+
+      dragStartPosRef.current = { x: event.clientX, y: event.clientY };
+      // isDraggingRef.current = false;
+      setIsDragging(false);
+      draggedNodeRef.current = clickedNode;
+      // setDraggedNode(clickedNode);
+
+      // Fix node position during drag
+      clickedNode.fx = clickedNode.x;
+      clickedNode.fy = clickedNode.y;
+
+      simulationRef.current?.alpha(0.3).restart();
+    },
+    [allowNodeDrag, getNodeAtPosition, isClickOnExpandButton],
+  );
 
   // Handle mouse move (for hover and dragging)
   const handleMouseMove = useCallback(
@@ -902,24 +943,35 @@ export const D3SimpleView = ({
       if (!canvas) return;
 
       // Handle dragging
-      if (draggedNode && allowNodeDrag) {
+      if (draggedNodeRef.current && allowNodeDrag) {
         // Check if we've moved enough to consider it a drag
         const dx = event.clientX - dragStartPosRef.current.x;
         const dy = event.clientY - dragStartPosRef.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
+
         if (dist > 3) {
-          isDraggingRef.current = true;
+          // isDraggingRef.current = true;
+          setIsDragging(true);
         }
-        
-        if (isDraggingRef.current) {
+
+        if (isDragging) {
           const rect = canvas.getBoundingClientRect();
           const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
           const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-          draggedNode.fx = x - dragOffsetRef.current.x;
-          draggedNode.fy = y - dragOffsetRef.current.y;
-          
+          const fx = x - dragOffsetRef.current.x;
+          const fy = y - dragOffsetRef.current.y;
+
+          draggedNodeRef.current.fx = fx;
+          draggedNodeRef.current.fy = fy;
+
+          // setDraggedNode((prev) => {
+          //   const current = { ...prev! };
+          //   current.fx = fx;
+          //   current.fy = fy;
+          //   return current;
+          // });
+
           simulationRef.current?.alpha(0.3).restart();
           return;
         }
@@ -947,27 +999,22 @@ export const D3SimpleView = ({
 
       setHoveredNode(closest);
     },
-    [forceNodes, draggedNode, allowNodeDrag],
+    [allowNodeDrag, forceNodes, isDragging],
   );
 
-  // Handle mouse up (stop dragging)
   const handleMouseUp = useCallback(() => {
-    if (draggedNode) {
-      draggedNode.fx = null;
-      draggedNode.fy = null;
-      setDraggedNode(null);
+    if (draggedNodeRef.current) {
+      draggedNodeRef.current = null;
       simulationRef.current?.alpha(0.3).restart();
     }
-  }, [draggedNode]);
+  }, []);
 
-  // Handle add node
   const handleAddNode = useCallback(() => {
     if (!popupNode || !ALLOW_ADD_DELETE) return;
 
     const newNodeId = `node-${Date.now()}`;
     const newNodeLevel = popupNode.level + 1;
-    
-    // Create new node data
+
     const newNode: CustomNode = {
       id: newNodeId,
       type: "custom",
@@ -986,17 +1033,15 @@ export const D3SimpleView = ({
       },
     };
 
-    // Create edge from parent to new node
     const newEdge: Edge = {
       id: `edge-${Date.now()}`,
       source: popupNode.id,
       target: newNodeId,
     };
 
-    // Update local state
     setNodesState((prev) => [...prev, newNode]);
     setEdgesState((prev) => [...prev, newEdge]);
-    
+
     setShowNodePopup(false);
     setPopupNode(null);
   }, [popupNode]);
@@ -1011,12 +1056,10 @@ export const D3SimpleView = ({
 
     // Update nodes state - remove the node and all descendants
     setNodesState((prev) => prev.filter((node) => !nodesToDelete.has(node.id)));
-    
+
     // Update edges state - remove edges connected to deleted nodes
-    setEdgesState((prev) => 
-      prev.filter((edge) => 
-        !nodesToDelete.has(edge.source) && !nodesToDelete.has(edge.target)
-      )
+    setEdgesState((prev) =>
+      prev.filter((edge) => !nodesToDelete.has(edge.source) && !nodesToDelete.has(edge.target)),
     );
 
     // Clear selection if deleted node was selected
@@ -1030,14 +1073,56 @@ export const D3SimpleView = ({
     setPopupNode(null);
   }, [popupNode, nodesById, getAllDescendants]);
 
+  const onZoomFit = useCallback(() => {
+    if (forceNodes.length === 0) return;
+
+    const xs = forceNodes.map((n) => n.x);
+    const ys = forceNodes.map((n) => n.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const graphWidth = maxX - minX || 1;
+    const graphHeight = maxY - minY || 1;
+    const padding = 50;
+
+    const scale = Math.min(
+      (dimensions.width - padding * 2) / graphWidth,
+      (dimensions.height - padding * 2) / graphHeight,
+    );
+
+    const newTransform = zoomIdentity
+      .translate(
+        (dimensions.width - graphWidth * scale) / 2 - minX * scale,
+        (dimensions.height - graphHeight * scale) / 2 - minY * scale,
+      )
+      .scale(scale);
+
+    transformRef.current = newTransform;
+    setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+  }, [dimensions.height, dimensions.width, forceNodes]);
+
+  const onZoomIn = useCallback(() => {
+    const newTransform = transformRef.current.scale(1.3);
+    transformRef.current = newTransform;
+    setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+  }, [transformRef]);
+
+  const onZoomOut = useCallback(() => {
+    const newTransform = transformRef.current.scale(0.7);
+    transformRef.current = newTransform;
+    setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+  }, [transformRef]);
+
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ 
-          width: "100%", 
-          height: "100%", 
-          cursor: draggedNode ? "grabbing" : hoveredNode ? "pointer" : "grab" 
+        style={{
+          width: "100%",
+          height: "100%",
+          cursor: isDragging ? "grabbing" : hoveredNode ? "pointer" : "grab",
         }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => {
@@ -1095,7 +1180,7 @@ export const D3SimpleView = ({
             )}
             {hoveredNode.childIds.length > 0 && (
               <div style={{ color: "#10B981", marginTop: "4px" }}>
-                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? 'ren' : ''}
+                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? "ren" : ""}
                 {collapsedNodes.has(hoveredNode.id) && " (collapsed)"}
               </div>
             )}
@@ -1192,44 +1277,13 @@ export const D3SimpleView = ({
       )}
 
       {/* Toolbar */}
-      <div style={{ position: "absolute", top: 80, right: 16, zIndex: 1000, pointerEvents: "auto" }}>
+      <div
+        style={{ position: "absolute", top: 80, right: 16, zIndex: 1000, pointerEvents: "auto" }}
+      >
         <Toolbar
-          onZoomIn={() => {
-            const newTransform = transformRef.current.scale(1.3);
-            transformRef.current = newTransform;
-            setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
-          }}
-          onZoomOut={() => {
-            const newTransform = transformRef.current.scale(0.7);
-            transformRef.current = newTransform;
-            setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
-          }}
-          onZoomFit={() => {
-            if (forceNodes.length === 0) return;
-            
-            const xs = forceNodes.map(n => n.x);
-            const ys = forceNodes.map(n => n.y);
-            const minX = Math.min(...xs);
-            const maxX = Math.max(...xs);
-            const minY = Math.min(...ys);
-            const maxY = Math.max(...ys);
-
-            const graphWidth = maxX - minX || 1;
-            const graphHeight = maxY - minY || 1;
-            const padding = 50;
-            
-            const scale = Math.min(
-              (dimensions.width - padding * 2) / graphWidth,
-              (dimensions.height - padding * 2) / graphHeight
-            );
-
-            const newTransform = zoomIdentity
-              .translate((dimensions.width - graphWidth * scale) / 2 - minX * scale, (dimensions.height - graphHeight * scale) / 2 - minY * scale)
-              .scale(scale);
-            
-            transformRef.current = newTransform;
-            setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
-          }}
+          onZoomIn={onZoomIn}
+          onZoomOut={onZoomOut}
+          onZoomFit={onZoomFit}
           onToggleOverview={() => setIsOverviewOpen(!isOverviewOpen)}
           isOverviewOpen={isOverviewOpen}
           allowNodeDrag={allowNodeDrag}
@@ -1241,7 +1295,7 @@ export const D3SimpleView = ({
       <Overview
         isOpen={isOverviewOpen}
         onClose={() => setIsOverviewOpen(false)}
-        nodes={forceNodes.map(n => ({ id: n.id, x: n.x, y: n.y, level: n.level }))}
+        nodes={forceNodes.map((n) => ({ id: n.id, x: n.x, y: n.y, level: n.level }))}
         viewportTransform={viewportTransform}
         canvasWidth={dimensions.width}
         canvasHeight={dimensions.height}
