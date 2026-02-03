@@ -94,6 +94,7 @@ export const D3SimpleView = ({
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragStartPosRef = useRef({ x: 0, y: 0 });
   const clickedOnExpandButtonRef = useRef(false);
+  const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Add/Delete popup state
   const [showNodePopup, setShowNodePopup] = useState(false);
@@ -865,6 +866,13 @@ export const D3SimpleView = ({
       }
 
       if (clickedNode) {
+        // Close tooltip when selecting a node
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+          tooltipTimeoutRef.current = null;
+        }
+        setHoveredNode(null);
+
         // Handle selection
         if (event.ctrlKey || event.metaKey) {
           setSelectedNodes((prev) => {
@@ -949,9 +957,14 @@ export const D3SimpleView = ({
         const dy = event.clientY - dragStartPosRef.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist > 3) {
-          // isDraggingRef.current = true;
+      if (dist > 3) {
           setIsDragging(true);
+          // Close tooltip when starting drag
+          if (tooltipTimeoutRef.current) {
+            clearTimeout(tooltipTimeoutRef.current);
+            tooltipTimeoutRef.current = null;
+          }
+          setHoveredNode(null);
         }
 
         if (isDragging) {
@@ -964,13 +977,6 @@ export const D3SimpleView = ({
 
           draggedNodeRef.current.fx = fx;
           draggedNodeRef.current.fy = fy;
-
-          // setDraggedNode((prev) => {
-          //   const current = { ...prev! };
-          //   current.fx = fx;
-          //   current.fy = fy;
-          //   return current;
-          // });
 
           simulationRef.current?.alpha(0.3).restart();
           return;
@@ -997,7 +1003,23 @@ export const D3SimpleView = ({
         }
       });
 
-      setHoveredNode(closest);
+      if (closest) {
+        // Cancel any pending tooltip close
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+          tooltipTimeoutRef.current = null;
+        }
+        setHoveredNode(closest);
+      } else {
+        // Only clear if we're not over the tooltip (it will handle its own close)
+        // Delay slightly to allow mouse to travel to tooltip
+        if (!tooltipTimeoutRef.current) {
+          tooltipTimeoutRef.current = setTimeout(() => {
+            setHoveredNode(null);
+            tooltipTimeoutRef.current = null;
+          }, 150);
+        }
+      }
     },
     [allowNodeDrag, forceNodes, isDragging],
   );
@@ -1126,7 +1148,7 @@ export const D3SimpleView = ({
         }}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => {
-          setHoveredNode(null);
+          // Don't immediately clear - let the tooltip timeout handle it
           handleMouseUp();
         }}
         onMouseDown={handleMouseDown}
@@ -1138,35 +1160,65 @@ export const D3SimpleView = ({
         <div
           style={{
             position: "absolute",
-            left: 16,
-            bottom: 16,
-            padding: "14px 18px",
-            background: "rgba(0, 0, 0, 0.92)",
+            left: hoveredNode.x * viewportTransform.k + viewportTransform.x,
+            top: hoveredNode.y * viewportTransform.k + viewportTransform.y - (hoveredNode.level === 0 ? 22 : hoveredNode.level === 1 ? 16 : 11) - 8,
+            transform: "translate(-50%, -100%)",
+            padding: "12px 16px",
+            background: "rgba(0, 0, 0, 0.95)",
             borderRadius: "10px",
             color: "white",
             fontSize: "13px",
-            zIndex: 20,
-            maxWidth: "300px",
-            boxShadow: "0 4px 15px rgba(0,0,0,0.4)",
+            zIndex: 100,
+            maxWidth: "320px",
+            minWidth: "200px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+            pointerEvents: "auto",
+            backdropFilter: "blur(4px)",
+          }}
+          onMouseEnter={() => {
+            // Cancel the timeout when entering tooltip
+            if (tooltipTimeoutRef.current) {
+              clearTimeout(tooltipTimeoutRef.current);
+              tooltipTimeoutRef.current = null;
+            }
+          }}
+          onMouseLeave={() => {
+            // Close tooltip when leaving it
+            setHoveredNode(null);
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+          {/* Arrow pointing down to the node */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: -8,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 0,
+              height: 0,
+              borderLeft: "8px solid transparent",
+              borderRight: "8px solid transparent",
+              borderTop: "8px solid rgba(0, 0, 0, 0.95)",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
             <span
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: "26px",
-                height: "26px",
+                width: "28px",
+                height: "28px",
                 background: hoveredNode.level === 0 ? "#7B1FA2" : "#3B82F6",
                 borderRadius: "50%",
                 fontSize: "12px",
                 fontWeight: 700,
+                flexShrink: 0,
               }}
             >
               {hoveredNode.level}
             </span>
-            <span style={{ fontWeight: 600, fontSize: "14px" }}>{hoveredNode.label}</span>
+            <span style={{ fontWeight: 600, fontSize: "14px", wordBreak: "break-word" }}>{hoveredNode.label}</span>
           </div>
           <div style={{ color: "#D1D5DB", fontSize: "12px", lineHeight: 1.6 }}>
             <div>
@@ -1186,6 +1238,89 @@ export const D3SimpleView = ({
             )}
             {hoveredNode.level === 0 && (
               <div style={{ color: "#F59E0B", marginTop: "4px" }}>🌟 Core Node</div>
+            )}
+          </div>
+          {/* Interactive actions */}
+          <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                // Center view on this node
+                const nodeScreenX = hoveredNode.x * viewportTransform.k + viewportTransform.x;
+                const nodeScreenY = hoveredNode.y * viewportTransform.k + viewportTransform.y;
+                const centerX = dimensions.width / 2;
+                const centerY = dimensions.height / 2;
+                const newTransform = transformRef.current
+                  .translate(centerX - nodeScreenX, centerY - nodeScreenY);
+                transformRef.current = newTransform;
+                setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+              }}
+              style={{
+                padding: "6px 12px",
+                background: "#3B82F6",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "11px",
+                fontWeight: 500,
+                pointerEvents: "auto",
+              }}
+            >
+              Center View
+            </button>
+            {hoveredNode.childIds.length > 0 && (
+              <button
+                onClick={() => {
+                  setCollapsedNodes((prev) => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(hoveredNode.id)) {
+                      newSet.delete(hoveredNode.id);
+                    } else {
+                      newSet.add(hoveredNode.id);
+                    }
+                    return newSet;
+                  });
+                }}
+                style={{
+                  padding: "6px 12px",
+                  background: collapsedNodes.has(hoveredNode.id) ? "#10B981" : "#EF4444",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  pointerEvents: "auto",
+                }}
+              >
+                {collapsedNodes.has(hoveredNode.id) ? "Expand" : "Collapse"}
+              </button>
+            )}
+            {ALLOW_ADD_DELETE && (
+              <button
+                onClick={() => {
+                  setSelectedNodes(new Set([hoveredNode.id]));
+                  setPopupNode(hoveredNode);
+                  setPopupPosition({
+                    x: hoveredNode.x * viewportTransform.k + viewportTransform.x,
+                    y: hoveredNode.y * viewportTransform.k + viewportTransform.y,
+                  });
+                  setShowNodePopup(true);
+                }}
+                style={{
+                  padding: "6px 12px",
+                  background: "#8B5CF6",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  pointerEvents: "auto",
+                }}
+              >
+                Actions
+              </button>
             )}
           </div>
         </div>
