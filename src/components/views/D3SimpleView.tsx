@@ -54,6 +54,7 @@ interface D3SimpleViewProps {
   collisionMode?: CollisionMode;
   showLevelLabels?: boolean;
   showChildCount?: boolean;
+  showTooltipOnHover?: boolean;
 }
 
 export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree" | "cluster";
@@ -67,6 +68,7 @@ export const D3SimpleView = ({
   collisionMode = "full",
   showLevelLabels = false,
   showChildCount: showChildCountProp = false,
+  showTooltipOnHover = false,
 }: D3SimpleViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1067,7 +1069,7 @@ export const D3SimpleView = ({
         }
       }
     },
-    [allowNodeDrag, forceNodes, isDragging],
+    [allowNodeDrag, forceNodes, isDragging, showTooltipOnHover],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -1216,7 +1218,7 @@ export const D3SimpleView = ({
         onDoubleClick={handleDoubleClick}
       />
 
-      {hoveredNode && (
+      {showTooltipOnHover && hoveredNode && (
         <div
           className={styles.tooltip}
           style={{

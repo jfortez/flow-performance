@@ -7,11 +7,12 @@ interface ViewSwitcherProps {
   onChangeView: (view: ViewType) => void;
 }
 
-const views: { id: ViewType; label: string; description: string; category: "d3" | "reactflow" | "explorer" }[] = [
+const views: { id: ViewType; label: string; description: string; category: "d3" | "reactflow" | "explorer" | "gojs" }[] = [
   { id: "d3simple", label: "D3 Simple", description: "Simple d3-force layout", category: "d3" },
   { id: "d3canvas", label: "D3 Canvas", description: "Canvas rendering with limits", category: "d3" },
   { id: "d3cluster", label: "D3 Cluster", description: "D3 hierarchy cluster", category: "d3" },
   { id: "local", label: "Local", description: "Focus+context view", category: "d3" },
+  { id: "gojs", label: "GoJS", description: "GoJS with Overview and Force Layout", category: "gojs" },
   { id: "force", label: "Force", description: "Force-directed layout", category: "reactflow" },
   { id: "dagre", label: "Dagre", description: "Hierarchical layout", category: "reactflow" },
   { id: "radial", label: "Radial", description: "Radial layout", category: "reactflow" },
@@ -21,7 +22,7 @@ const views: { id: ViewType; label: string; description: string; category: "d3" 
 ];
 
 export const ViewSwitcher = ({ currentView, onChangeView }: ViewSwitcherProps) => {
-  const [activeCategory, setActiveCategory] = useState<"d3" | "reactflow" | "explorer">("d3");
+  const [activeCategory, setActiveCategory] = useState<"d3" | "reactflow" | "explorer" | "gojs">("d3");
 
   const filteredViews = views.filter((view) => view.category === activeCategory);
 
@@ -33,6 +34,12 @@ export const ViewSwitcher = ({ currentView, onChangeView }: ViewSwitcherProps) =
           onClick={() => setActiveCategory("d3")}
         >
           D3 Views
+        </button>
+        <button
+          className={`${styles.categoryTab} ${activeCategory === "gojs" ? styles.active : ""}`}
+          onClick={() => setActiveCategory("gojs")}
+        >
+          GoJS
         </button>
         <button
           className={`${styles.categoryTab} ${activeCategory === "reactflow" ? styles.active : ""}`}

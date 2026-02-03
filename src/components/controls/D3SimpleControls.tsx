@@ -13,6 +13,8 @@ interface D3SimpleControlsProps {
   onShowLevelLabelsChange?: (show: boolean) => void;
   showChildCount?: boolean;
   onShowChildCountChange?: (show: boolean) => void;
+  showTooltipOnHover?: boolean;
+  onShowTooltipOnHoverChange?: (show: boolean) => void;
 }
 
 export const D3SimpleControls = ({
@@ -24,6 +26,8 @@ export const D3SimpleControls = ({
   onShowLevelLabelsChange,
   showChildCount = false,
   onShowChildCountChange,
+  showTooltipOnHover = false,
+  onShowTooltipOnHoverChange,
 }: D3SimpleControlsProps) => {
   return (
     <div className={styles.container}>
@@ -73,6 +77,15 @@ export const D3SimpleControls = ({
                 className={styles.checkbox}
               />
               <span>Show Child Count</span>
+            </label>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={showTooltipOnHover}
+                onChange={(e) => onShowTooltipOnHoverChange?.(e.target.checked)}
+                className={styles.checkbox}
+              />
+              <span>Show Tooltip on Hover</span>
             </label>
           </div>
         </div>

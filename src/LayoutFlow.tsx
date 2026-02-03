@@ -15,6 +15,7 @@ import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
 import { D3SimpleView, type LayoutMode, type CollisionMode } from "./components/views/D3SimpleView";
 import { TreeView } from "./components/views/TreeView";
+import { GoJSView } from "./components/views/GoJSView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
 import { UnifiedControls, BottomSearchBar } from "./components/controls/UnifiedControls";
 import { D3SimpleControls } from "./components/controls/D3SimpleControls";
@@ -43,6 +44,7 @@ function LayoutFlowContent() {
   const [d3CollisionMode, setD3CollisionMode] = useState<CollisionMode>("full");
   const [d3ShowLevelLabels, setD3ShowLevelLabels] = useState(false);
   const [d3ShowChildCount, setD3ShowChildCount] = useState(false);
+  const [d3ShowTooltipOnHover, setD3ShowTooltipOnHover] = useState(false);
 
   const { currentView, setCurrentView } = useViewState("d3simple");
 
@@ -52,7 +54,8 @@ function LayoutFlowContent() {
       currentView === "d3cluster" ||
       currentView === "d3simple" ||
       currentView === "local" ||
-      currentView === "tree"
+      currentView === "tree" ||
+      currentView === "gojs"
     ) {
       return generateHierarchicalData(
         config.nodeCount,
@@ -101,6 +104,7 @@ function LayoutFlowContent() {
             collisionMode={d3CollisionMode}
             showLevelLabels={d3ShowLevelLabels}
             showChildCount={d3ShowChildCount}
+            showTooltipOnHover={d3ShowTooltipOnHover}
           />
         );
       case "local":
@@ -113,6 +117,8 @@ function LayoutFlowContent() {
         );
       case "tree":
         return <TreeView {...commonProps} maxVisibleNodes={config.nodeCount} />;
+      case "gojs":
+        return <GoJSView {...commonProps} />;
       default:
         return <ForceView {...commonProps} />;
     }
@@ -128,6 +134,7 @@ function LayoutFlowContent() {
     d3CollisionMode,
     d3ShowLevelLabels,
     d3ShowChildCount,
+    d3ShowTooltipOnHover,
   ]);
 
   return (
@@ -165,6 +172,8 @@ function LayoutFlowContent() {
                     onShowLevelLabelsChange={setD3ShowLevelLabels}
                     showChildCount={d3ShowChildCount}
                     onShowChildCountChange={setD3ShowChildCount}
+                    showTooltipOnHover={d3ShowTooltipOnHover}
+                    onShowTooltipOnHoverChange={setD3ShowTooltipOnHover}
                   />
                 </div>
               )}
