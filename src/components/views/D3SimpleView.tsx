@@ -739,6 +739,8 @@ export const D3SimpleView = ({
       .on("zoom", (event) => {
         transformRef.current = event.transform;
         setViewportTransform({ x: event.transform.x, y: event.transform.y, k: event.transform.k });
+        // Deselect nodes when zooming/panning
+        setSelectedNodes(new Set());
       });
 
     select(canvas).call(zoomBehavior);
@@ -842,6 +844,8 @@ export const D3SimpleView = ({
       if (isDragging) {
         setIsDragging(false);
         clickedOnExpandButtonRef.current = false;
+        // Deselect when dragging ends
+        setSelectedNodes(new Set());
         return;
       }
 
@@ -988,14 +992,15 @@ export const D3SimpleView = ({
         const dy = event.clientY - dragStartPosRef.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist > 3) {
+      if (dist > 3) {
           setIsDragging(true);
-          // Close tooltip when starting drag
+          // Close tooltip and deselect when starting drag
           if (tooltipTimeoutRef.current) {
             clearTimeout(tooltipTimeoutRef.current);
             tooltipTimeoutRef.current = null;
           }
           setHoveredNode(null);
+          setSelectedNodes(new Set());
         }
 
         if (isDragging) {
