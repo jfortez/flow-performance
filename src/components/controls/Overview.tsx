@@ -121,90 +121,105 @@ export const Overview = ({
     };
   }, [draw, isOpen]);
 
-  // Convert screen coordinates to world coordinates
-  const screenToWorld = useCallback((screenX: number, screenY: number) => {
-    const { scale, offsetX, offsetY } = getScaleAndOffset();
-    const worldX = (screenX - offsetX) / scale;
-    const worldY = (screenY - offsetY) / scale;
-    return { x: worldX, y: worldY };
-  }, [getScaleAndOffset]);
-
   // Handle mouse down - start dragging
-  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!onViewportChange) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!onViewportChange) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    isDraggingRef.current = true;
-    dragStartRef.current = { x, y };
-    transformStartRef.current = { ...transformRef.current };
-  }, [onViewportChange]);
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      isDraggingRef.current = true;
+      dragStartRef.current = { x, y };
+      transformStartRef.current = { ...transformRef.current };
+    },
+    [onViewportChange],
+  );
 
   // Handle mouse move - pan
-  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDraggingRef.current || !onViewportChange) return;
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDraggingRef.current || !onViewportChange) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
 
-    const dx = x - dragStartRef.current.x;
-    const dy = y - dragStartRef.current.y;
+      const dx = x - dragStartRef.current.x;
+      const dy = y - dragStartRef.current.y;
 
-    const { scale } = getScaleAndOffset();
-    const worldDx = dx / scale * transformStartRef.current.k;
-    const worldDy = dy / scale * transformStartRef.current.k;
+      const { scale } = getScaleAndOffset();
+      const worldDx = (dx / scale) * transformStartRef.current.k;
+      const worldDy = (dy / scale) * transformStartRef.current.k;
 
-    onViewportChange({
-      x: transformStartRef.current.x - worldDx,
-      y: transformStartRef.current.y - worldDy,
-      k: transformStartRef.current.k,
-    });
-  }, [onViewportChange, getScaleAndOffset]);
+      onViewportChange({
+        x: transformStartRef.current.x - worldDx,
+        y: transformStartRef.current.y - worldDy,
+        k: transformStartRef.current.k,
+      });
+    },
+    [onViewportChange, getScaleAndOffset],
+  );
 
   // Handle mouse up - stop dragging
   const handleMouseUp = useCallback(() => {
     isDraggingRef.current = false;
   }, []);
 
-  // Handle wheel - zoom
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
-    if (!onViewportChange) return;
-    
-    event.preventDefault();
-    
+  // Attach wheel event listener with passive: false
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !isOpen) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const wheelHandler = (event: WheelEvent) => {
+      // Prevent default scrolling behavior
+      event.preventDefault();
+      event.stopPropagation();
 
-    // Calculate zoom factor
-    const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
-    const newK = Math.max(0.3, Math.min(4, transformRef.current.k * zoomFactor));
-    
-    // Get world coordinates of mouse position before zoom
-    const worldPos = screenToWorld(mouseX, mouseY);
-    
-    // Calculate new transform to zoom towards mouse position
-    const newX = -worldPos.x * newK + canvasWidth / 2;
-    const newY = -worldPos.y * newK + canvasHeight / 2;
+      if (!onViewportChange) return;
 
-    onViewportChange({
-      x: newX,
-      y: newY,
-      k: newK,
-    });
-  }, [onViewportChange, screenToWorld, canvasWidth, canvasHeight]);
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      // Calculate zoom factor
+      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+      const newK = Math.max(0.3, Math.min(4, transformRef.current.k * zoomFactor));
+
+      // Get world coordinates of mouse position before zoom
+      const { scale, offsetX, offsetY } = getScaleAndOffset();
+      const worldX = (mouseX - offsetX) / scale;
+      const worldY = (mouseY - offsetY) / scale;
+
+      // Calculate new transform to zoom towards mouse position
+      const newX = -worldX * newK + canvasWidth / 2;
+      const newY = -worldY * newK + canvasHeight / 2;
+
+      onViewportChange({
+        x: newX,
+        y: newY,
+        k: newK,
+      });
+    };
+
+    // Use capture phase and explicit non-passive option
+    const options: AddEventListenerOptions = {
+      passive: false,
+      capture: false,
+    };
+
+    canvas.addEventListener("wheel", wheelHandler, options);
+    return () => {
+      canvas.removeEventListener("wheel", wheelHandler, options);
+    };
+  }, [isOpen, onViewportChange, getScaleAndOffset, canvasWidth, canvasHeight]);
 
   if (!isOpen) return null;
 
@@ -228,8 +243,10 @@ export const Overview = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        style={{ cursor: onViewportChange ? (isDraggingRef.current ? 'grabbing' : 'grab') : 'default' }}
+        style={{
+          // eslint-disable-next-line react-hooks/refs
+          cursor: onViewportChange ? (isDraggingRef.current ? "grabbing" : "grab") : "default",
+        }}
       />
     </div>
   );
