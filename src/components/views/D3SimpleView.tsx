@@ -45,7 +45,7 @@ interface D3SimpleViewProps {
   searchResults: Array<{ node: CustomNode; matches: boolean }>;
 }
 
-export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree";
+export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree" | "cluster";
 export type CollisionMode = "full" | "minimal" | "none";
 
 interface D3SimpleViewProps {
@@ -398,27 +398,29 @@ export const D3SimpleView = ({
 
       ctx.globalAlpha = 1;
 
-      // Level badge (always visible on top)
-      const badgeRadius = Math.max(7, 9 / transform.k);
-      const badgeY = node.y - radius - badgeRadius / 2;
+      // Level badge (only if showLevelLabels is true)
+      if (showLevelLabels) {
+        const badgeRadius = Math.max(7, 9 / transform.k);
+        const badgeY = node.y - radius - badgeRadius / 2;
 
-      ctx.beginPath();
-      ctx.arc(node.x, badgeY, badgeRadius, 0, Math.PI * 2);
-      ctx.fillStyle = isConnected ? "#9370DB" : node.level === 0 ? "#7B1FA2" : "#3B82F6";
-      ctx.fill();
+        ctx.beginPath();
+        ctx.arc(node.x, badgeY, badgeRadius, 0, Math.PI * 2);
+        ctx.fillStyle = isConnected ? "#9370DB" : node.level === 0 ? "#7B1FA2" : "#3B82F6";
+        ctx.fill();
 
-      ctx.lineWidth = 1 / transform.k;
-      ctx.strokeStyle = "white";
-      ctx.stroke();
+        ctx.lineWidth = 1 / transform.k;
+        ctx.strokeStyle = "white";
+        ctx.stroke();
 
-      ctx.fillStyle = "white";
-      ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(node.level), node.x, badgeY);
+        ctx.fillStyle = "white";
+        ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(String(node.level), node.x, badgeY);
+      }
 
       // Child count badge (if has children)
-      if (node.childIds.length > 0 && transform.k > 0.6) {
+      if (showChildCountProp && node.childIds.length > 0 && transform.k > 0.6) {
         const countRadius = Math.max(8, 10 / transform.k);
         const countX = node.x + radius * 0.7;
         const countY = node.y - radius * 0.7;
@@ -464,7 +466,7 @@ export const D3SimpleView = ({
     });
 
     ctx.restore();
-  }, [forceNodes, forceLinks, nodesById, hoveredNode, dimensions]);
+  }, [forceNodes, forceLinks, nodesById, hoveredNode, dimensions, showLevelLabels, showChildCountProp]);
 
   // Animation loop
   useEffect(() => {
@@ -688,7 +690,7 @@ export const D3SimpleView = ({
             )}
             {hoveredNode.childIds.length > 0 && (
               <div style={{ color: "#10B981", marginTop: "4px" }}>
-                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? "ren" : ""}
+                👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? 'ren' : ''}
               </div>
             )}
             {hoveredNode.level === 0 && (
@@ -697,6 +699,67 @@ export const D3SimpleView = ({
           </div>
         </div>
       )}
+
+      {/* Toolbar */}
+      <div style={{ position: "absolute", top: 80, right: 16, zIndex: 1000, pointerEvents: "auto" }}>
+        <Toolbar
+          onZoomIn={() => {
+            const newTransform = transformRef.current.scale(1.3);
+            transformRef.current = newTransform;
+            setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+          }}
+          onZoomOut={() => {
+            const newTransform = transformRef.current.scale(0.7);
+            transformRef.current = newTransform;
+            setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+          }}
+          onZoomFit={() => {
+            if (forceNodes.length === 0) return;
+            
+            const xs = forceNodes.map(n => n.x);
+            const ys = forceNodes.map(n => n.y);
+            const minX = Math.min(...xs);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+            const maxY = Math.max(...ys);
+
+            const graphWidth = maxX - minX || 1;
+            const graphHeight = maxY - minY || 1;
+            const padding = 50;
+            
+            const scale = Math.min(
+              (dimensions.width - padding * 2) / graphWidth,
+              (dimensions.height - padding * 2) / graphHeight
+            );
+
+            const newTransform = zoomIdentity
+              .translate((dimensions.width - graphWidth * scale) / 2 - minX * scale, (dimensions.height - graphHeight * scale) / 2 - minY * scale)
+              .scale(scale);
+            
+            transformRef.current = newTransform;
+            setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
+          }}
+          onToggleOverview={() => setIsOverviewOpen(!isOverviewOpen)}
+          isOverviewOpen={isOverviewOpen}
+          allowNodeDrag={allowNodeDrag}
+          onToggleNodeDrag={() => setAllowNodeDrag(!allowNodeDrag)}
+        />
+      </div>
+
+      {/* Overview */}
+      <Overview
+        isOpen={isOverviewOpen}
+        onClose={() => setIsOverviewOpen(false)}
+        nodes={forceNodes.map(n => ({ id: n.id, x: n.x, y: n.y, level: n.level }))}
+        viewportTransform={viewportTransform}
+        canvasWidth={dimensions.width}
+        canvasHeight={dimensions.height}
+        onViewportChange={(transform) => {
+          const newTransform = zoomIdentity.translate(transform.x, transform.y).scale(transform.k);
+          transformRef.current = newTransform;
+          setViewportTransform({ x: transform.x, y: transform.y, k: transform.k });
+        }}
+      />
     </div>
   );
 };
