@@ -7,7 +7,7 @@ interface ViewSwitcherProps {
   onChangeView: (view: ViewType) => void;
 }
 
-const views: { id: ViewType; label: string; description: string; category: "d3" | "reactflow" }[] = [
+const views: { id: ViewType; label: string; description: string; category: "d3" | "reactflow" | "explorer" }[] = [
   { id: "d3simple", label: "D3 Simple", description: "Simple d3-force layout", category: "d3" },
   { id: "d3canvas", label: "D3 Canvas", description: "Canvas rendering with limits", category: "d3" },
   { id: "d3cluster", label: "D3 Cluster", description: "D3 hierarchy cluster", category: "d3" },
@@ -17,10 +17,11 @@ const views: { id: ViewType; label: string; description: string; category: "d3" 
   { id: "radial", label: "Radial", description: "Radial layout", category: "reactflow" },
   { id: "concentric", label: "Concentric", description: "Circular rings", category: "reactflow" },
   { id: "grid", label: "Grid", description: "Grid layout", category: "reactflow" },
+  { id: "tree", label: "Hierarchy", description: "Hierarchical tree explorer", category: "explorer" },
 ];
 
 export const ViewSwitcher = ({ currentView, onChangeView }: ViewSwitcherProps) => {
-  const [activeCategory, setActiveCategory] = useState<"d3" | "reactflow">("d3");
+  const [activeCategory, setActiveCategory] = useState<"d3" | "reactflow" | "explorer">("d3");
 
   const filteredViews = views.filter((view) => view.category === activeCategory);
 
@@ -38,6 +39,12 @@ export const ViewSwitcher = ({ currentView, onChangeView }: ViewSwitcherProps) =
           onClick={() => setActiveCategory("reactflow")}
         >
           ReactFlow
+        </button>
+        <button
+          className={`${styles.categoryTab} ${activeCategory === "explorer" ? styles.active : ""}`}
+          onClick={() => setActiveCategory("explorer")}
+        >
+          Explorer
         </button>
       </div>
 

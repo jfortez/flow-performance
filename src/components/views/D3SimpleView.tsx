@@ -13,6 +13,8 @@ import { select } from "d3-selection";
 import type { Edge } from "@xyflow/react";
 import type { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
 import type { CustomNode } from "../../types";
+import { Toolbar } from "../controls/Toolbar";
+import { Overview } from "../controls/Overview";
 
 interface ForceNode extends SimulationNodeDatum {
   id: string;
@@ -52,6 +54,8 @@ interface D3SimpleViewProps {
   searchResults: Array<{ node: CustomNode; matches: boolean }>;
   layoutMode?: LayoutMode;
   collisionMode?: CollisionMode;
+  showLevelLabels?: boolean;
+  showChildCount?: boolean;
 }
 
 export const D3SimpleView = ({
@@ -60,6 +64,8 @@ export const D3SimpleView = ({
   searchResults,
   layoutMode = "concentric",
   collisionMode = "full",
+  showLevelLabels = false,
+  showChildCount: showChildCountProp = false,
 }: D3SimpleViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,6 +74,9 @@ export const D3SimpleView = ({
   const rafRef = useRef<number | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [hoveredNode, setHoveredNode] = useState<ForceNode | null>(null);
+  const [isOverviewOpen, setIsOverviewOpen] = useState(true);
+  const [viewportTransform, setViewportTransform] = useState({ x: 0, y: 0, k: 1 });
+  const [allowNodeDrag, setAllowNodeDrag] = useState(true);
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {

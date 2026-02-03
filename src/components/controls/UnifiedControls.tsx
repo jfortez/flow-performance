@@ -43,6 +43,27 @@ export const UnifiedControls = ({
     [config, onConfigChange]
   );
 
+  const handleMinChildrenChange = useCallback(
+    (value: number) => {
+      onConfigChange({ ...config, minChildrenPerNode: value });
+    },
+    [config, onConfigChange]
+  );
+
+  const handleMaxChildrenChange = useCallback(
+    (value: number | null) => {
+      onConfigChange({ ...config, maxChildrenPerNode: value });
+    },
+    [config, onConfigChange]
+  );
+
+  const handleTargetFirstLevelChange = useCallback(
+    (value: number) => {
+      onConfigChange({ ...config, targetFirstLevel: value });
+    },
+    [config, onConfigChange]
+  );
+
   return (
     <div className={styles.container}>
       <button
@@ -101,13 +122,82 @@ export const UnifiedControls = ({
             </div>
           </div>
 
+          <div className={styles.sectionDivider} />
+
+          <div className={styles.advancedSection}>
+            <span className={styles.sectionLabel}>Hierarchical Settings</span>
+
+            <div className={styles.sliderControl}>
+              <div className={styles.sliderHeader}>
+                <span className={styles.sliderLabel}>Min Children/Node</span>
+                <span className={styles.sliderValue}>{config.minChildrenPerNode}</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={config.minChildrenPerNode}
+                onChange={(e) => handleMinChildrenChange(Number(e.target.value))}
+                className={styles.sliderInput}
+              />
+              <div className={styles.sliderRange}>
+                <span>1</span>
+                <span>10</span>
+              </div>
+            </div>
+
+            <div className={styles.sliderControl}>
+              <div className={styles.sliderHeader}>
+                <span className={styles.sliderLabel}>Max Children/Node</span>
+                <span className={styles.sliderValue}>{config.maxChildrenPerNode ?? "∞"}</span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="20"
+                step="1"
+                value={config.maxChildrenPerNode ?? 20}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  handleMaxChildrenChange(val >= 20 ? null : val);
+                }}
+                className={styles.sliderInput}
+              />
+              <div className={styles.sliderRange}>
+                <span>2</span>
+                <span>∞</span>
+              </div>
+            </div>
+
+            <div className={styles.sliderControl}>
+              <div className={styles.sliderHeader}>
+                <span className={styles.sliderLabel}>Target Level 1 Nodes</span>
+                <span className={styles.sliderValue}>{config.targetFirstLevel}</span>
+              </div>
+              <input
+                type="range"
+                min="5"
+                max="50"
+                step="1"
+                value={config.targetFirstLevel}
+                onChange={(e) => handleTargetFirstLevelChange(Number(e.target.value))}
+                className={styles.sliderInput}
+              />
+              <div className={styles.sliderRange}>
+                <span>5</span>
+                <span>50</span>
+              </div>
+            </div>
+          </div>
+
           <div className={styles.presetsSection}>
             <span className={styles.presetsLabel}>Quick Presets</span>
             <div className={styles.presetsGrid}>
               {[
-                { nodes: 50, depth: 3, label: "Small" },
-                { nodes: 150, depth: 4, label: "Medium" },
-                { nodes: 300, depth: 5, label: "Large" },
+                { nodes: 50, depth: 3, minChildren: 2, maxChildren: 4, targetFirst: 15, label: "Small" },
+                { nodes: 150, depth: 4, minChildren: 3, maxChildren: 5, targetFirst: 25, label: "Medium" },
+                { nodes: 300, depth: 5, minChildren: 3, maxChildren: 6, targetFirst: 30, label: "Large" },
               ].map((preset) => (
                 <button
                   key={preset.label}
@@ -121,6 +211,9 @@ export const UnifiedControls = ({
                       ...config,
                       nodeCount: preset.nodes,
                       maxDepth: preset.depth,
+                      minChildrenPerNode: preset.minChildren,
+                      maxChildrenPerNode: preset.maxChildren,
+                      targetFirstLevel: preset.targetFirst,
                     })
                   }
                 >

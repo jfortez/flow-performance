@@ -14,10 +14,11 @@ import { RadialView } from "./components/views/RadialView";
 import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
 import { D3SimpleView, type LayoutMode, type CollisionMode } from "./components/views/D3SimpleView";
+import { TreeView } from "./components/views/TreeView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
 import { UnifiedControls, BottomSearchBar } from "./components/controls/UnifiedControls";
 import { D3SimpleControls } from "./components/controls/D3SimpleControls";
-import { NodeExplorerControl } from "./components/controls/NodeExplorerControl";
+
 import { LocalViewControls } from "./components/controls/LocalViewControls";
 import { LocalView } from "./components/views/LocalView";
 import { Metrics } from "./components/Metrics";
@@ -29,15 +30,19 @@ function LayoutFlowContent() {
     nodeCount: 150,
     maxDepth: 2,
     childrenPerNode: [],
+    minChildrenPerNode: 3,
+    maxChildrenPerNode: 5,
+    targetFirstLevel: 25,
   });
 
-  const [maxVisibleNodes, setMaxVisibleNodes] = useState(150);
   const [neighborLevels, setNeighborLevels] = useState(2);
   const [overviewLayout, setOverviewLayout] = useState<"cluster" | "tree">("cluster");
 
   // D3SimpleView specific controls
   const [d3LayoutMode, setD3LayoutMode] = useState<LayoutMode>("concentric");
   const [d3CollisionMode, setD3CollisionMode] = useState<CollisionMode>("full");
+  const [d3ShowLevelLabels, setD3ShowLevelLabels] = useState(false);
+  const [d3ShowChildCount, setD3ShowChildCount] = useState(false);
 
   const { currentView, setCurrentView } = useViewState("d3simple");
 
@@ -46,12 +51,19 @@ function LayoutFlowContent() {
       currentView === "d3canvas" ||
       currentView === "d3cluster" ||
       currentView === "d3simple" ||
-      currentView === "local"
+      currentView === "local" ||
+      currentView === "tree"
     ) {
-      return generateHierarchicalData(config.nodeCount, config.maxDepth);
+      return generateHierarchicalData(
+        config.nodeCount,
+        config.maxDepth,
+        config.minChildrenPerNode,
+        config.maxChildrenPerNode,
+        config.targetFirstLevel,
+      );
     }
     return generateLargeFirstLevel(config.nodeCount);
-  }, [config.nodeCount, config.maxDepth, currentView]);
+  }, [config, currentView]);
 
   const { searchTerm, setSearchTerm, searchResults, matchedNodes, hasMatches } = useSearch(nodes);
 
@@ -78,15 +90,17 @@ function LayoutFlowContent() {
       case "radial":
         return <RadialView {...commonProps} />;
       case "d3canvas":
-        return <D3CanvasView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
+        return <D3CanvasView {...commonProps} maxVisibleNodes={config.nodeCount} />;
       case "d3cluster":
-        return <D3ClusterView {...commonProps} maxVisibleNodes={maxVisibleNodes} />;
+        return <D3ClusterView {...commonProps} maxVisibleNodes={config.nodeCount} />;
       case "d3simple":
         return (
           <D3SimpleView
             {...commonProps}
             layoutMode={d3LayoutMode}
             collisionMode={d3CollisionMode}
+            showLevelLabels={d3ShowLevelLabels}
+            showChildCount={d3ShowChildCount}
           />
         );
       case "local":
@@ -97,6 +111,8 @@ function LayoutFlowContent() {
             overviewLayout={overviewLayout}
           />
         );
+      case "tree":
+        return <TreeView {...commonProps} maxVisibleNodes={config.nodeCount} />;
       default:
         return <ForceView {...commonProps} />;
     }
@@ -105,11 +121,13 @@ function LayoutFlowContent() {
     nodes,
     edges,
     searchResults,
-    maxVisibleNodes,
+    config.nodeCount,
     neighborLevels,
     overviewLayout,
     d3LayoutMode,
     d3CollisionMode,
+    d3ShowLevelLabels,
+    d3ShowChildCount,
   ]);
 
   return (
@@ -126,16 +144,6 @@ function LayoutFlowContent() {
           onConfigChange={handleConfigChange}
           renderViewControls={() => (
             <>
-              {/* Controles específicos de vista */}
-              {(currentView === "d3canvas" || currentView === "d3cluster") && (
-                <div className={styles.viewControls}>
-                  <NodeExplorerControl
-                    value={maxVisibleNodes}
-                    maxValue={config.nodeCount}
-                    onChange={setMaxVisibleNodes}
-                  />
-                </div>
-              )}
               {currentView === "local" && (
                 <div className={styles.viewControls}>
                   <LocalViewControls
@@ -153,6 +161,10 @@ function LayoutFlowContent() {
                     onLayoutModeChange={setD3LayoutMode}
                     collisionMode={d3CollisionMode}
                     onCollisionModeChange={setD3CollisionMode}
+                    showLevelLabels={d3ShowLevelLabels}
+                    onShowLevelLabelsChange={setD3ShowLevelLabels}
+                    showChildCount={d3ShowChildCount}
+                    onShowChildCountChange={setD3ShowChildCount}
                   />
                 </div>
               )}
