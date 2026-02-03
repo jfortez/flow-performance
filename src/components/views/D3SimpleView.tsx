@@ -92,6 +92,9 @@ export const D3SimpleView = ({
   // Drag state
   const [draggedNode, setDraggedNode] = useState<ForceNode | null>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
+  const dragStartPosRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const clickedOnExpandButtonRef = useRef(false);
   
   // Add/Delete popup state
   const [showNodePopup, setShowNodePopup] = useState(false);
@@ -509,47 +512,46 @@ export const D3SimpleView = ({
         ctx.fillText(String(node.childIds.length), countX, countY);
       }
 
-      // Expand/Collapse button - positioned at the edge where parent connects
+      // Expand/Collapse button - positioned at the edge towards children
       if (ALLOW_EXPAND_COLLAPSE && node.childIds.length > 0 && transform.k > 0.6) {
         const isCollapsed = collapsedNodes.has(node.id);
         const btnRadius = Math.max(7, 9 / transform.k);
         
-        // Calculate position at the edge towards parent (or default to bottom-right for root)
+        // Calculate position at the edge away from parent (towards children)
         let btnX: number;
         let btnY: number;
         
         if (node.parentId && nodesById.has(node.parentId)) {
           const parentNode = nodesById.get(node.parentId)!;
-          // Calculate angle from node to parent
-          const angle = Math.atan2(parentNode.y - node.y, parentNode.x - node.x);
-          // Position button at the edge of the node in the direction of the parent
+          // Calculate angle from parent to node (opposite direction)
+          const angle = Math.atan2(node.y - parentNode.y, node.x - parentNode.x);
+          // Position button at the edge of the node away from parent (towards children)
           btnX = node.x + Math.cos(angle) * radius;
           btnY = node.y + Math.sin(angle) * radius;
         } else {
-          // Root node - position at bottom-right
-          const angle = Math.PI / 4; // 45 degrees
-          btnX = node.x + Math.cos(angle) * radius;
-          btnY = node.y + Math.sin(angle) * radius;
+          // Root node - position at bottom (towards children)
+          btnX = node.x;
+          btnY = node.y + radius;
         }
 
-        // Button background - outline style (stroke only, no fill)
+        // Button - outline style only, slate/gray color
         ctx.beginPath();
         ctx.arc(btnX, btnY, btnRadius, 0, Math.PI * 2);
-        ctx.fillStyle = "white";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
         ctx.fill();
         ctx.lineWidth = 1.5 / transform.k;
-        ctx.strokeStyle = isCollapsed ? "#3B82F6" : "#EF4444";
+        ctx.strokeStyle = "#64748b"; // slate-500
         ctx.stroke();
 
-        // Plus/Minus sign
-        ctx.strokeStyle = isCollapsed ? "#3B82F6" : "#EF4444";
+        // Plus/Minus sign - slate color
+        ctx.strokeStyle = "#64748b"; // slate-500
         ctx.lineWidth = 1.5 / transform.k;
         ctx.beginPath();
         // Horizontal line
         ctx.moveTo(btnX - btnRadius * 0.4, btnY);
         ctx.lineTo(btnX + btnRadius * 0.4, btnY);
         
-        // Vertical line (only for plus)
+        // Vertical line (only for plus/collapsed)
         if (isCollapsed) {
           ctx.moveTo(btnX, btnY - btnRadius * 0.4);
           ctx.lineTo(btnX, btnY + btnRadius * 0.4);
@@ -759,19 +761,20 @@ export const D3SimpleView = ({
     const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
     const btnRadius = 9;
     
-    // Calculate button position (same as in render)
+    // Calculate button position at edge towards children (away from parent)
     let btnX: number;
     let btnY: number;
     
     if (node.parentId && nodesById.has(node.parentId)) {
       const parentNode = nodesById.get(node.parentId)!;
-      const angle = Math.atan2(parentNode.y - node.y, parentNode.x - node.x);
+      // Angle from parent to node (towards children)
+      const angle = Math.atan2(node.y - parentNode.y, node.x - parentNode.x);
       btnX = node.x + Math.cos(angle) * radius;
       btnY = node.y + Math.sin(angle) * radius;
     } else {
-      const angle = Math.PI / 4;
-      btnX = node.x + Math.cos(angle) * radius;
-      btnY = node.y + Math.sin(angle) * radius;
+      // Root node - button at bottom
+      btnX = node.x;
+      btnY = node.y + radius;
     }
 
     const dx = x - btnX;
@@ -784,6 +787,21 @@ export const D3SimpleView = ({
   // Handle node click for selection
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
     if (!ALLOW_SELECTION) return;
+    
+    // Don't process click if we were dragging
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false;
+      return;
+    }
+    
+    // Don't process click if we clicked on expand/collapse button
+    if (clickedOnExpandButtonRef.current) {
+      clickedOnExpandButtonRef.current = false;
+      // Deselect node when clicking expand/collapse button
+      setSelectedNodes(new Set());
+      setShowNodePopup(false);
+      return;
+    }
 
     const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
 
@@ -799,6 +817,9 @@ export const D3SimpleView = ({
           }
           return newSet;
         });
+        // Deselect node when clicking expand/collapse button
+        setSelectedNodes(new Set());
+        setShowNodePopup(false);
         return;
       }
 
@@ -814,53 +835,56 @@ export const D3SimpleView = ({
           return newSet;
         });
       } else {
-        setSelectedNodes((prev) => {
-          if (prev.has(clickedNode.id) && prev.size === 1) {
-            // Click on already selected single node - show popup for add/delete
-            if (ALLOW_ADD_DELETE) {
-              setPopupNode(clickedNode);
-              setPopupPosition({ x: event.clientX, y: event.clientY });
-              setShowNodePopup(true);
-            }
-            return prev;
-          } else {
-            return new Set([clickedNode.id]);
-          }
-        });
+        // Select the node and show popup immediately
+        setSelectedNodes(new Set([clickedNode.id]));
+        if (ALLOW_ADD_DELETE) {
+          setPopupNode(clickedNode);
+          setPopupPosition({ x: event.clientX, y: event.clientY });
+          setShowNodePopup(true);
+        }
       }
     } else {
-      setSelectedNodes(new Set());
+      // Click outside any node - close popup and deselect
       setShowNodePopup(false);
+      setSelectedNodes(new Set());
     }
   }, [getNodeAtPosition, isClickOnExpandButton]);
 
   // Handle mouse down for dragging
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!allowNodeDrag) return;
-
     const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
     
-    if (clickedNode && !isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-      const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
-
-      dragOffsetRef.current = {
-        x: x - clickedNode.x,
-        y: y - clickedNode.y,
-      };
-
-      setDraggedNode(clickedNode);
-      
-      // Fix node position during drag
-      clickedNode.fx = clickedNode.x;
-      clickedNode.fy = clickedNode.y;
-      
-      simulationRef.current?.alpha(0.3).restart();
+    // Check if clicking on expand/collapse button
+    if (clickedNode && isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
+      clickedOnExpandButtonRef.current = true;
+      return;
     }
+    
+    clickedOnExpandButtonRef.current = false;
+    
+    if (!allowNodeDrag || !clickedNode) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+    const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+    dragOffsetRef.current = {
+      x: x - clickedNode.x,
+      y: y - clickedNode.y,
+    };
+
+    dragStartPosRef.current = { x: event.clientX, y: event.clientY };
+    isDraggingRef.current = false;
+    setDraggedNode(clickedNode);
+    
+    // Fix node position during drag
+    clickedNode.fx = clickedNode.x;
+    clickedNode.fy = clickedNode.y;
+    
+    simulationRef.current?.alpha(0.3).restart();
   }, [allowNodeDrag, getNodeAtPosition, isClickOnExpandButton]);
 
   // Handle mouse move (for hover and dragging)
@@ -871,15 +895,26 @@ export const D3SimpleView = ({
 
       // Handle dragging
       if (draggedNode && allowNodeDrag) {
-        const rect = canvas.getBoundingClientRect();
-        const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-        const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
-
-        draggedNode.fx = x - dragOffsetRef.current.x;
-        draggedNode.fy = y - dragOffsetRef.current.y;
+        // Check if we've moved enough to consider it a drag
+        const dx = event.clientX - dragStartPosRef.current.x;
+        const dy = event.clientY - dragStartPosRef.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
         
-        simulationRef.current?.alpha(0.3).restart();
-        return;
+        if (dist > 3) {
+          isDraggingRef.current = true;
+        }
+        
+        if (isDraggingRef.current) {
+          const rect = canvas.getBoundingClientRect();
+          const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+          const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+          draggedNode.fx = x - dragOffsetRef.current.x;
+          draggedNode.fy = y - dragOffsetRef.current.y;
+          
+          simulationRef.current?.alpha(0.3).restart();
+          return;
+        }
       }
 
       // Handle hover
