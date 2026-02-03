@@ -16,6 +16,11 @@ import type { CustomNode } from "../../types";
 import { Toolbar } from "../controls/Toolbar";
 import { Overview } from "../controls/Overview";
 
+// Feature flags
+const ALLOW_SELECTION = true;
+const ALLOW_EXPAND_COLLAPSE = true;
+const ALLOW_ADD_DELETE = true;
+
 interface ForceNode extends SimulationNodeDatum {
   id: string;
   label: string;
@@ -77,6 +82,21 @@ export const D3SimpleView = ({
   const [isOverviewOpen, setIsOverviewOpen] = useState(true);
   const [viewportTransform, setViewportTransform] = useState({ x: 0, y: 0, k: 1 });
   const [allowNodeDrag, setAllowNodeDrag] = useState(true);
+  
+  // Selection state
+  const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
+  
+  // Expand/collapse state
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  
+  // Drag state
+  const [draggedNode, setDraggedNode] = useState<ForceNode | null>(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+  
+  // Add/Delete popup state
+  const [showNodePopup, setShowNodePopup] = useState(false);
+  const [popupNode, setPopupNode] = useState<ForceNode | null>(null);
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
 
   // Build hierarchical structure with parent-child relationships
   const { forceNodes, forceLinks, nodesById } = useMemo(() => {
