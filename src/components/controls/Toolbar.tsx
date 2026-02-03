@@ -9,6 +9,8 @@ interface ToolbarProps {
   isOverviewOpen: boolean;
   allowNodeDrag?: boolean;
   onToggleNodeDrag?: () => void;
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
 }
 
 export const Toolbar = ({
@@ -19,6 +21,8 @@ export const Toolbar = ({
   isOverviewOpen,
   allowNodeDrag = true,
   onToggleNodeDrag,
+  onExpandAll,
+  onCollapseAll,
 }: ToolbarProps) => {
   return (
     <div className={styles.toolbar}>
@@ -84,6 +88,30 @@ export const Toolbar = ({
           <rect x="14" y="7" width="3" height="3" />
           <rect x="7" y="14" width="3" height="3" />
           <rect x="14" y="14" width="3" height="3" />
+        </svg>
+      </button>
+
+      <div className={styles.divider} />
+
+      <button
+        className={styles.button}
+        onClick={onExpandAll}
+        title="Expand All"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 12h8M12 8v8" />
+        </svg>
+      </button>
+
+      <button
+        className={styles.button}
+        onClick={onCollapseAll}
+        title="Collapse All"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 12h8" />
         </svg>
       </button>
     </div>

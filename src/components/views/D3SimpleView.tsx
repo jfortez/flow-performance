@@ -1167,6 +1167,18 @@ export const D3SimpleView = ({
     setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
   }, [transformRef]);
 
+  const onExpandAll = useCallback(() => {
+    setCollapsedNodes(new Set());
+  }, []);
+
+  const onCollapseAll = useCallback(() => {
+    const allNodeIds = new Set<string>();
+    nodesState.forEach((node) => {
+      allNodeIds.add(node.id);
+    });
+    setCollapsedNodes(allNodeIds);
+  }, [nodesState]);
+
   return (
     <div ref={containerRef} className={styles.d3SimpleView}>
       <canvas
@@ -1357,6 +1369,8 @@ export const D3SimpleView = ({
           isOverviewOpen={isOverviewOpen}
           allowNodeDrag={allowNodeDrag}
           onToggleNodeDrag={() => setAllowNodeDrag(!allowNodeDrag)}
+          onExpandAll={onExpandAll}
+          onCollapseAll={onCollapseAll}
         />
       </div>
 
