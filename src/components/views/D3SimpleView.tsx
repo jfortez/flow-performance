@@ -15,6 +15,7 @@ import type { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
 import type { CustomNode } from "../../types";
 import { Toolbar } from "../controls/Toolbar";
 import { Overview } from "../controls/Overview";
+import styles from "./D3SimpleView.module.css";
 
 const ALLOW_SELECTION = true;
 const ALLOW_EXPAND_COLLAPSE = true;
@@ -1138,14 +1139,12 @@ export const D3SimpleView = ({
   }, [transformRef]);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div ref={containerRef} className={styles.d3SimpleView}>
       <canvas
         ref={canvasRef}
-        style={{
-          width: "100%",
-          height: "100%",
-          cursor: isDragging ? "grabbing" : hoveredNode ? "pointer" : "grab",
-        }}
+        className={`${styles.canvas} ${
+          isDragging ? styles["canvas--grabbing"] : hoveredNode ? styles["canvas--pointer"] : styles["canvas--grab"]
+        }`}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => {
           // Don't immediately clear - let the tooltip timeout handle it
@@ -1158,22 +1157,10 @@ export const D3SimpleView = ({
 
       {hoveredNode && (
         <div
+          className={styles.tooltip}
           style={{
-            position: "absolute",
             left: hoveredNode.x * viewportTransform.k + viewportTransform.x,
             top: hoveredNode.y * viewportTransform.k + viewportTransform.y - (hoveredNode.level === 0 ? 22 : hoveredNode.level === 1 ? 16 : 11) - 8,
-            transform: "translate(-50%, -100%)",
-            padding: "12px 16px",
-            background: "rgba(0, 0, 0, 0.95)",
-            borderRadius: "10px",
-            color: "white",
-            fontSize: "13px",
-            zIndex: 100,
-            maxWidth: "320px",
-            minWidth: "200px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-            pointerEvents: "auto",
-            backdropFilter: "blur(4px)",
           }}
           onMouseEnter={() => {
             // Cancel the timeout when entering tooltip
@@ -1187,40 +1174,18 @@ export const D3SimpleView = ({
             setHoveredNode(null);
           }}
         >
-          {/* Arrow pointing down to the node */}
-          <div
-            style={{
-              position: "absolute",
-              bottom: -8,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 0,
-              height: 0,
-              borderLeft: "8px solid transparent",
-              borderRight: "8px solid transparent",
-              borderTop: "8px solid rgba(0, 0, 0, 0.95)",
-            }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+          <div className={styles.tooltipArrow} />
+          <div className={styles.tooltipHeader}>
             <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "28px",
-                height: "28px",
-                background: hoveredNode.level === 0 ? "#7B1FA2" : "#3B82F6",
-                borderRadius: "50%",
-                fontSize: "12px",
-                fontWeight: 700,
-                flexShrink: 0,
-              }}
+              className={`${styles.levelBadge} ${
+                hoveredNode.level === 0 ? styles["levelBadge--root"] : styles["levelBadge--child"]
+              }`}
             >
               {hoveredNode.level}
             </span>
-            <span style={{ fontWeight: 600, fontSize: "14px", wordBreak: "break-word" }}>{hoveredNode.label}</span>
+            <span className={styles.tooltipLabel}>{hoveredNode.label}</span>
           </div>
-          <div style={{ color: "#D1D5DB", fontSize: "12px", lineHeight: 1.6 }}>
+          <div className={styles.tooltipInfo}>
             <div>
               <strong>Type:</strong> {hoveredNode.type}
             </div>
@@ -1228,20 +1193,19 @@ export const D3SimpleView = ({
               <strong>ID:</strong> {hoveredNode.id}
             </div>
             {hoveredNode.parentId && (
-              <div style={{ color: "#9CA3AF" }}>👆 Parent: {hoveredNode.parentId}</div>
+              <div className={styles.tooltipInfoSecondary}>👆 Parent: {hoveredNode.parentId}</div>
             )}
             {hoveredNode.childIds.length > 0 && (
-              <div style={{ color: "#10B981", marginTop: "4px" }}>
+              <div className={styles.tooltipInfoSuccess}>
                 👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? "ren" : ""}
                 {collapsedNodes.has(hoveredNode.id) && " (collapsed)"}
               </div>
             )}
             {hoveredNode.level === 0 && (
-              <div style={{ color: "#F59E0B", marginTop: "4px" }}>🌟 Core Node</div>
+              <div className={styles.tooltipInfoWarning}>🌟 Core Node</div>
             )}
           </div>
-          {/* Interactive actions */}
-          <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <div className={styles.tooltipActions}>
             <button
               onClick={() => {
                 // Center view on this node
@@ -1254,17 +1218,7 @@ export const D3SimpleView = ({
                 transformRef.current = newTransform;
                 setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
               }}
-              style={{
-                padding: "6px 12px",
-                background: "#3B82F6",
-                color: "white",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "11px",
-                fontWeight: 500,
-                pointerEvents: "auto",
-              }}
+              className={`${styles.tooltipButton} ${styles["tooltipButton--primary"]}`}
             >
               Center View
             </button>
@@ -1281,17 +1235,9 @@ export const D3SimpleView = ({
                     return newSet;
                   });
                 }}
-                style={{
-                  padding: "6px 12px",
-                  background: collapsedNodes.has(hoveredNode.id) ? "#10B981" : "#EF4444",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "11px",
-                  fontWeight: 500,
-                  pointerEvents: "auto",
-                }}
+                className={`${styles.tooltipButton} ${
+                  collapsedNodes.has(hoveredNode.id) ? styles["tooltipButton--success"] : styles["tooltipButton--danger"]
+                }`}
               >
                 {collapsedNodes.has(hoveredNode.id) ? "Expand" : "Collapse"}
               </button>
@@ -1307,17 +1253,7 @@ export const D3SimpleView = ({
                   });
                   setShowNodePopup(true);
                 }}
-                style={{
-                  padding: "6px 12px",
-                  background: "#8B5CF6",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "11px",
-                  fontWeight: 500,
-                  pointerEvents: "auto",
-                }}
+                className={`${styles.tooltipButton} ${styles["tooltipButton--purple"]}`}
               >
                 Actions
               </button>
@@ -1329,48 +1265,22 @@ export const D3SimpleView = ({
       {/* Node Action Popup */}
       {ALLOW_ADD_DELETE && showNodePopup && popupNode && (
         <div
+          className={styles.popup}
           style={{
-            position: "fixed",
             left: popupPosition.x,
             top: popupPosition.y,
-            transform: "translate(-50%, -100%) translateY(-10px)",
-            background: "white",
-            borderRadius: "8px",
-            padding: "8px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            zIndex: 1000,
-            display: "flex",
-            gap: "8px",
           }}
         >
           <button
             onClick={handleAddNode}
-            style={{
-              padding: "6px 12px",
-              background: "#3B82F6",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: 500,
-            }}
+            className={`${styles.popupButton} ${styles["popupButton--primary"]}`}
           >
             Add Child
           </button>
           {popupNode.level > 0 && (
             <button
               onClick={handleDeleteNode}
-              style={{
-                padding: "6px 12px",
-                background: "#EF4444",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontSize: "12px",
-                fontWeight: 500,
-              }}
+              className={`${styles.popupButton} ${styles["popupButton--danger"]}`}
             >
               Delete
             </button>
@@ -1380,30 +1290,16 @@ export const D3SimpleView = ({
               setShowNodePopup(false);
               setPopupNode(null);
             }}
-            style={{
-              padding: "6px 12px",
-              background: "#6B7280",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: 500,
-            }}
+            className={`${styles.popupButton} ${styles["popupButton--secondary"]}`}
           >
             Cancel
           </button>
         </div>
       )}
 
-      {/* Click outside to close popup */}
       {ALLOW_ADD_DELETE && showNodePopup && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 999,
-          }}
+          className={styles.popupOverlay}
           onClick={() => {
             setShowNodePopup(false);
             setPopupNode(null);
@@ -1411,10 +1307,7 @@ export const D3SimpleView = ({
         />
       )}
 
-      {/* Toolbar */}
-      <div
-        style={{ position: "absolute", top: 80, right: 16, zIndex: 1000, pointerEvents: "auto" }}
-      >
+      <div className={styles.toolbarContainer}>
         <Toolbar
           onZoomIn={onZoomIn}
           onZoomOut={onZoomOut}

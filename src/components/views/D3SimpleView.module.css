@@ -1,0 +1,185 @@
+.d3SimpleView {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.canvas--grab {
+  cursor: grab;
+}
+
+.canvas--pointer {
+  cursor: pointer;
+}
+
+.canvas--grabbing {
+  cursor: grabbing;
+}
+
+.tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.95);
+  border-radius: 10px;
+  color: white;
+  font-size: 13px;
+  z-index: 100;
+  max-width: 320px;
+  min-width: 200px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  backdrop-filter: blur(4px);
+}
+
+.tooltipArrow {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid rgba(0, 0, 0, 0.95);
+}
+
+.tooltipHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.levelBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.levelBadge--root {
+  background: #7B1FA2;
+}
+
+.levelBadge--child {
+  background: #3B82F6;
+}
+
+.tooltipLabel {
+  font-weight: 600;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.tooltipInfo {
+  color: #D1D5DB;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tooltipInfoSecondary {
+  color: #9CA3AF;
+}
+
+.tooltipInfoSuccess {
+  color: #10B981;
+  margin-top: 4px;
+}
+
+.tooltipInfoWarning {
+  color: #F59E0B;
+  margin-top: 4px;
+}
+
+.tooltipActions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tooltipButton {
+  padding: 6px 12px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  pointer-events: auto;
+}
+
+.tooltipButton--primary {
+  background: #3B82F6;
+}
+
+.tooltipButton--success {
+  background: #10B981;
+}
+
+.tooltipButton--danger {
+  background: #EF4444;
+}
+
+.tooltipButton--purple {
+  background: #8B5CF6;
+}
+
+.popupOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+.popup {
+  position: fixed;
+  transform: translate(-50%, -100%) translateY(-10px);
+  background: white;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  gap: 8px;
+}
+
+.popupButton {
+  padding: 6px 12px;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.popupButton--primary {
+  background: #3B82F6;
+}
+
+.popupButton--danger {
+  background: #EF4444;
+}
+
+.popupButton--secondary {
+  background: #6B7280;
+}
+
+.toolbarContainer {
+  position: absolute;
+  top: 80px;
+  right: 16px;
+  z-index: 1000;
+  pointer-events: auto;
+}
