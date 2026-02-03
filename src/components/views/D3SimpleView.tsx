@@ -86,8 +86,14 @@ export const D3SimpleView = ({
   // Selection state
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
 
-  // Expand/collapse state
-  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  // Expand/collapse state - initially collapse all nodes including root
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(() => {
+    const allNodeIds = new Set<string>();
+    initialNodes.forEach((node) => {
+      allNodeIds.add(node.id);
+    });
+    return allNodeIds;
+  });
   const [isDragging, setIsDragging] = useState(false);
 
   // Drag state
@@ -96,11 +102,6 @@ export const D3SimpleView = ({
   const dragStartPosRef = useRef({ x: 0, y: 0 });
   const clickedOnExpandButtonRef = useRef(false);
   const tooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Add/Delete popup state
-  const [showNodePopup, setShowNodePopup] = useState(false);
-  const [popupNode, setPopupNode] = useState<ForceNode | null>(null);
-  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
 
   // Update local state when props change
   useEffect(() => {
@@ -163,12 +164,12 @@ export const D3SimpleView = ({
       }
     });
 
-    // Calculate visible nodes (exclude children of collapsed nodes)
+    // Calculate visible nodes - only show direct children of expanded nodes
     const isNodeVisible = (nodeId: string): boolean => {
       const parentId = parentMap.get(nodeId);
-      if (!parentId) return true;
-      if (collapsedNodes.has(parentId)) return false;
-      return isNodeVisible(parentId);
+      if (!parentId) return true; // Root node is always visible
+      // Node is visible only if its direct parent is expanded (not collapsed)
+      return !collapsedNodes.has(parentId);
     };
 
     const visibleNodeIdsSet = new Set<string>();
@@ -728,6 +729,8 @@ export const D3SimpleView = ({
       .filter((event) => {
         // Allow zoom on wheel events always
         if (event.type === "wheel") return true;
+        // Disable zoom on double click to allow our custom double click handler
+        if (event.type === "dblclick") return false;
         // Disable zoom when dragging a node or when hovering a node (to allow click/drag)
         if (draggedNodeRef.current || hoveredNode) return false;
         // Allow zoom on background drag (pan)
@@ -827,6 +830,9 @@ export const D3SimpleView = ({
     [nodesById],
   );
 
+  // Ref to track if a double click occurred
+  const doubleClickRef = useRef(false);
+
   // Handle node click for selection
   const handleCanvasClick = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -836,6 +842,12 @@ export const D3SimpleView = ({
       if (isDragging) {
         setIsDragging(false);
         clickedOnExpandButtonRef.current = false;
+        return;
+      }
+
+      // Skip click handling if this was a double click
+      if (doubleClickRef.current) {
+        doubleClickRef.current = false;
         return;
       }
 
@@ -862,7 +874,6 @@ export const D3SimpleView = ({
         });
         // Deselect node when clicking expand/collapse button
         setSelectedNodes(new Set());
-        setShowNodePopup(false);
         return;
       }
 
@@ -886,21 +897,40 @@ export const D3SimpleView = ({
             return newSet;
           });
         } else {
-          // Select the node and show popup immediately
+          // Select the node
           setSelectedNodes(new Set([clickedNode.id]));
-          if (ALLOW_ADD_DELETE) {
-            setPopupNode(clickedNode);
-            setPopupPosition({ x: event.clientX, y: event.clientY });
-            setShowNodePopup(true);
-          }
         }
       } else {
-        // Click outside any node - close popup and deselect
-        setShowNodePopup(false);
+        // Click outside any node - deselect
         setSelectedNodes(new Set());
       }
     },
     [getNodeAtPosition, isClickOnExpandButton, isDragging],
+  );
+
+  // Handle double-click to expand node (only expand, not collapse)
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!ALLOW_EXPAND_COLLAPSE) return;
+
+      // Mark that a double click occurred
+      doubleClickRef.current = true;
+
+      const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
+
+      if (clickedNode && clickedNode.childIds.length > 0) {
+        // Only expand if currently collapsed
+        setCollapsedNodes((prev) => {
+          if (prev.has(clickedNode.id)) {
+            const newSet = new Set(prev);
+            newSet.delete(clickedNode.id);
+            return newSet;
+          }
+          return prev; // If already expanded, do nothing
+        });
+      }
+    },
+    [getNodeAtPosition],
   );
 
   // Handle mouse down for dragging
@@ -958,7 +988,7 @@ export const D3SimpleView = ({
         const dy = event.clientY - dragStartPosRef.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist > 3) {
+        if (dist > 3) {
           setIsDragging(true);
           // Close tooltip when starting drag
           if (tooltipTimeoutRef.current) {
@@ -1033,15 +1063,20 @@ export const D3SimpleView = ({
   }, []);
 
   const handleAddNode = useCallback(() => {
-    if (!popupNode || !ALLOW_ADD_DELETE) return;
+    if (!ALLOW_ADD_DELETE || selectedNodes.size === 0) return;
+
+    // Use the first selected node as parent
+    const parentId = Array.from(selectedNodes)[0];
+    const parentNode = nodesById.get(parentId);
+    if (!parentNode) return;
 
     const newNodeId = `node-${Date.now()}`;
-    const newNodeLevel = popupNode.level + 1;
+    const newNodeLevel = parentNode.level + 1;
 
     const newNode: CustomNode = {
       id: newNodeId,
       type: "custom",
-      position: { x: popupNode.x + 50, y: popupNode.y + 50 },
+      position: { x: parentNode.x + 50, y: parentNode.y + 50 },
       data: {
         label: `New Node ${newNodeId.slice(-4)}`,
         metadata: {
@@ -1058,24 +1093,25 @@ export const D3SimpleView = ({
 
     const newEdge: Edge = {
       id: `edge-${Date.now()}`,
-      source: popupNode.id,
+      source: parentId,
       target: newNodeId,
     };
 
     setNodesState((prev) => [...prev, newNode]);
     setEdgesState((prev) => [...prev, newEdge]);
-
-    setShowNodePopup(false);
-    setPopupNode(null);
-  }, [popupNode]);
+  }, [selectedNodes, nodesById]);
 
   // Handle delete node
   const handleDeleteNode = useCallback(() => {
-    if (!popupNode || !ALLOW_ADD_DELETE) return;
+    if (!ALLOW_ADD_DELETE || selectedNodes.size === 0) return;
 
-    // Get all descendants to delete
-    const descendantsToDelete = getAllDescendants(popupNode.id, nodesById);
-    const nodesToDelete = new Set([popupNode.id, ...descendantsToDelete]);
+    // Get all selected nodes and their descendants to delete
+    const nodesToDelete = new Set<string>();
+    selectedNodes.forEach((nodeId) => {
+      nodesToDelete.add(nodeId);
+      const descendants = getAllDescendants(nodeId, nodesById);
+      descendants.forEach((id) => nodesToDelete.add(id));
+    });
 
     // Update nodes state - remove the node and all descendants
     setNodesState((prev) => prev.filter((node) => !nodesToDelete.has(node.id)));
@@ -1085,16 +1121,9 @@ export const D3SimpleView = ({
       prev.filter((edge) => !nodesToDelete.has(edge.source) && !nodesToDelete.has(edge.target)),
     );
 
-    // Clear selection if deleted node was selected
-    setSelectedNodes((prev) => {
-      const newSet = new Set(prev);
-      nodesToDelete.forEach((id) => newSet.delete(id));
-      return newSet;
-    });
-
-    setShowNodePopup(false);
-    setPopupNode(null);
-  }, [popupNode, nodesById, getAllDescendants]);
+    // Clear selection
+    setSelectedNodes(new Set());
+  }, [selectedNodes, nodesById, getAllDescendants]);
 
   const onZoomFit = useCallback(() => {
     if (forceNodes.length === 0) return;
@@ -1143,7 +1172,11 @@ export const D3SimpleView = ({
       <canvas
         ref={canvasRef}
         className={`${styles.canvas} ${
-          isDragging ? styles["canvas--grabbing"] : hoveredNode ? styles["canvas--pointer"] : styles["canvas--grab"]
+          isDragging
+            ? styles["canvas--grabbing"]
+            : hoveredNode
+              ? styles["canvas--pointer"]
+              : styles["canvas--grab"]
         }`}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => {
@@ -1153,6 +1186,7 @@ export const D3SimpleView = ({
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onClick={handleCanvasClick}
+        onDoubleClick={handleDoubleClick}
       />
 
       {hoveredNode && (
@@ -1160,7 +1194,11 @@ export const D3SimpleView = ({
           className={styles.tooltip}
           style={{
             left: hoveredNode.x * viewportTransform.k + viewportTransform.x,
-            top: hoveredNode.y * viewportTransform.k + viewportTransform.y - (hoveredNode.level === 0 ? 22 : hoveredNode.level === 1 ? 16 : 11) - 8,
+            top:
+              hoveredNode.y * viewportTransform.k +
+              viewportTransform.y -
+              (hoveredNode.level === 0 ? 22 : hoveredNode.level === 1 ? 16 : 11) -
+              8,
           }}
           onMouseEnter={() => {
             // Cancel the timeout when entering tooltip
@@ -1213,8 +1251,10 @@ export const D3SimpleView = ({
                 const nodeScreenY = hoveredNode.y * viewportTransform.k + viewportTransform.y;
                 const centerX = dimensions.width / 2;
                 const centerY = dimensions.height / 2;
-                const newTransform = transformRef.current
-                  .translate(centerX - nodeScreenX, centerY - nodeScreenY);
+                const newTransform = transformRef.current.translate(
+                  centerX - nodeScreenX,
+                  centerY - nodeScreenY,
+                );
                 transformRef.current = newTransform;
                 setViewportTransform({ x: newTransform.x, y: newTransform.y, k: newTransform.k });
               }}
@@ -1236,76 +1276,77 @@ export const D3SimpleView = ({
                   });
                 }}
                 className={`${styles.tooltipButton} ${
-                  collapsedNodes.has(hoveredNode.id) ? styles["tooltipButton--success"] : styles["tooltipButton--danger"]
+                  collapsedNodes.has(hoveredNode.id)
+                    ? styles["tooltipButton--success"]
+                    : styles["tooltipButton--danger"]
                 }`}
               >
                 {collapsedNodes.has(hoveredNode.id) ? "Expand" : "Collapse"}
-              </button>
-            )}
-            {ALLOW_ADD_DELETE && (
-              <button
-                onClick={() => {
-                  setSelectedNodes(new Set([hoveredNode.id]));
-                  setPopupNode(hoveredNode);
-                  setPopupPosition({
-                    x: hoveredNode.x * viewportTransform.k + viewportTransform.x,
-                    y: hoveredNode.y * viewportTransform.k + viewportTransform.y,
-                  });
-                  setShowNodePopup(true);
-                }}
-                className={`${styles.tooltipButton} ${styles["tooltipButton--purple"]}`}
-              >
-                Actions
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* Node Action Popup */}
-      {ALLOW_ADD_DELETE && showNodePopup && popupNode && (
-        <div
-          className={styles.popup}
-          style={{
-            left: popupPosition.x,
-            top: popupPosition.y,
-          }}
-        >
-          <button
-            onClick={handleAddNode}
-            className={`${styles.popupButton} ${styles["popupButton--primary"]}`}
-          >
-            Add Child
-          </button>
-          {popupNode.level > 0 && (
-            <button
-              onClick={handleDeleteNode}
-              className={`${styles.popupButton} ${styles["popupButton--danger"]}`}
-            >
-              Delete
-            </button>
-          )}
-          <button
-            onClick={() => {
-              setShowNodePopup(false);
-              setPopupNode(null);
+      {/* Node Action Toolbar - positioned at selected node */}
+      {ALLOW_ADD_DELETE && selectedNodes.size === 1 && (() => {
+        const selectedId = Array.from(selectedNodes)[0];
+        const selectedNode = nodesById.get(selectedId);
+        if (!selectedNode) return null;
+        
+        const radius = selectedNode.level === 0 ? 22 : selectedNode.level === 1 ? 16 : 11;
+        const toolbarX = selectedNode.x * viewportTransform.k + viewportTransform.x + radius + 8;
+        const toolbarY = selectedNode.y * viewportTransform.k + viewportTransform.y;
+        
+        return (
+          <div 
+            className={styles.nodeActionToolbar}
+            style={{
+              left: toolbarX,
+              top: toolbarY,
+              transform: 'translateY(-50%)'
             }}
-            className={`${styles.popupButton} ${styles["popupButton--secondary"]}`}
           >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {ALLOW_ADD_DELETE && showNodePopup && (
-        <div
-          className={styles.popupOverlay}
-          onClick={() => {
-            setShowNodePopup(false);
-            setPopupNode(null);
-          }}
-        />
-      )}
+            <button
+              onClick={handleAddNode}
+              className={styles.nodeActionButton}
+              title="Add Child"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="16"/>
+                <line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+            </button>
+            
+            <button
+              className={styles.nodeActionButton}
+              title="Edit"
+              disabled
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            
+            {selectedNode.level > 0 && (
+              <button
+                onClick={handleDeleteNode}
+                className={`${styles.nodeActionButton} ${styles["nodeActionButton--danger"]}`}
+                title="Delete"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  <line x1="10" y1="11" x2="10" y2="17"/>
+                  <line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       <div className={styles.toolbarContainer}>
         <Toolbar

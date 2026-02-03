@@ -183,3 +183,48 @@
   z-index: 1000;
   pointer-events: auto;
 }
+
+.nodeActionToolbar {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.nodeActionButton {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #4b5563;
+  transition: all 0.15s ease;
+}
+
+.nodeActionButton:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.nodeActionButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nodeActionButton--danger {
+  color: #dc2626;
+}
+
+.nodeActionButton--danger:hover {
+  background: #fee2e2;
+}
