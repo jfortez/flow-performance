@@ -578,19 +578,26 @@ export const D3SimpleView = ({
         ctx.stroke();
       }
 
-      // Label
-      if (isNodeHovered || isConnected || transform.k > 0.7) {
+      // Label - show when hovered, connected, selected, or zoomed in
+      if (isNodeHovered || isConnected || isSelected || transform.k > 0.7) {
         const labelY = node.y + radius + 14 / transform.k;
         const fontSize = Math.max(10, 11 / transform.k);
 
-        ctx.font = `${isNodeHovered || isConnected ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
+        // Bold when hovered, connected, or selected
+        ctx.font = `${isNodeHovered || isConnected || isSelected ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
         const metrics = ctx.measureText(node.label);
         const padding = 3 / transform.k;
-        ctx.fillStyle =
-          isNodeHovered || isConnected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.95)";
+        
+        // Highlight background when selected
+        if (isSelected) {
+          ctx.fillStyle = "rgba(34, 197, 94, 0.2)"; // Light green background
+        } else {
+          ctx.fillStyle = isNodeHovered || isConnected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.95)";
+        }
+        
         ctx.beginPath();
         ctx.roundRect(
           node.x - metrics.width / 2 - padding,
@@ -601,7 +608,8 @@ export const D3SimpleView = ({
         );
         ctx.fill();
 
-        ctx.fillStyle = isConnected ? "#9370DB" : "#1F2937";
+        // Text color - green when selected
+        ctx.fillStyle = isSelected ? "#16A34A" : isConnected ? "#9370DB" : "#1F2937";
         ctx.fillText(node.label, node.x, labelY);
       }
     });
@@ -932,6 +940,8 @@ export const D3SimpleView = ({
           }
           return prev; // If already expanded, do nothing
         });
+        // Don't select node when expanding via double click
+        return;
       }
     },
     [getNodeAtPosition],
@@ -1312,7 +1322,7 @@ export const D3SimpleView = ({
         if (!selectedNode) return null;
         
         const radius = selectedNode.level === 0 ? 22 : selectedNode.level === 1 ? 16 : 11;
-        const toolbarX = selectedNode.x * viewportTransform.k + viewportTransform.x + radius + 8;
+        const toolbarX = selectedNode.x * viewportTransform.k + viewportTransform.x + radius + 16;
         const toolbarY = selectedNode.y * viewportTransform.k + viewportTransform.y;
         
         return (
