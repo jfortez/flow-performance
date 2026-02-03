@@ -37,6 +37,8 @@ interface ForceNode extends SimulationNodeDatum {
   childIds: string[];
   initialX: number;
   initialY: number;
+  fx?: number | null;
+  fy?: number | null;
 }
 
 interface ForceLink extends SimulationLinkDatum<ForceNode> {
@@ -48,24 +50,18 @@ interface D3SimpleViewProps {
   nodes: CustomNode[];
   edges: Edge[];
   searchResults: Array<{ node: CustomNode; matches: boolean }>;
-}
-
-export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree" | "cluster";
-export type CollisionMode = "full" | "minimal" | "none";
-
-interface D3SimpleViewProps {
-  nodes: CustomNode[];
-  edges: Edge[];
-  searchResults: Array<{ node: CustomNode; matches: boolean }>;
   layoutMode?: LayoutMode;
   collisionMode?: CollisionMode;
   showLevelLabels?: boolean;
   showChildCount?: boolean;
 }
 
+export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree" | "cluster";
+export type CollisionMode = "full" | "minimal" | "none";
+
 export const D3SimpleView = ({
-  nodes,
-  edges,
+  nodes: initialNodes,
+  edges: initialEdges,
   searchResults,
   layoutMode = "concentric",
   collisionMode = "full",
@@ -83,6 +79,10 @@ export const D3SimpleView = ({
   const [viewportTransform, setViewportTransform] = useState({ x: 0, y: 0, k: 1 });
   const [allowNodeDrag, setAllowNodeDrag] = useState(true);
   
+  // Local state for nodes and edges (initialized from props)
+  const [nodesState, setNodesState] = useState<CustomNode[]>(initialNodes);
+  const [edgesState, setEdgesState] = useState<Edge[]>(initialEdges);
+  
   // Selection state
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
   
@@ -98,10 +98,38 @@ export const D3SimpleView = ({
   const [popupNode, setPopupNode] = useState<ForceNode | null>(null);
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
 
+  // Update local state when props change
+  useEffect(() => {
+    setNodesState(initialNodes);
+  }, [initialNodes]);
+
+  useEffect(() => {
+    setEdgesState(initialEdges);
+  }, [initialEdges]);
+
+  // Helper to get all descendants of a node (including nested)
+  const getAllDescendants = useCallback((nodeId: string, nodesById: Map<string, ForceNode>): Set<string> => {
+    const descendants = new Set<string>();
+    const node = nodesById.get(nodeId);
+    if (!node) return descendants;
+    
+    const addDescendants = (currentId: string) => {
+      const currentNode = nodesById.get(currentId);
+      if (!currentNode) return;
+      currentNode.childIds.forEach((childId) => {
+        descendants.add(childId);
+        addDescendants(childId);
+      });
+    };
+    
+    addDescendants(nodeId);
+    return descendants;
+  }, []);
+
   // Build hierarchical structure with parent-child relationships
-  const { forceNodes, forceLinks, nodesById } = useMemo(() => {
-    const visibleCount = Math.min(nodes.length, 200);
-    const visibleNodes = nodes.slice(0, visibleCount);
+  const { forceNodes, forceLinks, nodesById, visibleNodeIds } = useMemo(() => {
+    const visibleCount = Math.min(nodesState.length, 200);
+    const visibleNodes = nodesState.slice(0, visibleCount);
 
     // Build relationships
     const nodeMap = new Map<string, CustomNode>();
@@ -113,10 +141,25 @@ export const D3SimpleView = ({
       childrenMap.set(node.id, []);
     });
 
-    edges.forEach((edge) => {
+    edgesState.forEach((edge) => {
       if (nodeMap.has(edge.source) && nodeMap.has(edge.target)) {
         childrenMap.get(edge.source)?.push(edge.target);
         parentMap.set(edge.target, edge.source);
+      }
+    });
+
+    // Calculate visible nodes (exclude children of collapsed nodes)
+    const isNodeVisible = (nodeId: string): boolean => {
+      const parentId = parentMap.get(nodeId);
+      if (!parentId) return true;
+      if (collapsedNodes.has(parentId)) return false;
+      return isNodeVisible(parentId);
+    };
+
+    const visibleNodeIdsSet = new Set<string>();
+    visibleNodes.forEach((node) => {
+      if (isNodeVisible(node.id)) {
+        visibleNodeIdsSet.add(node.id);
       }
     });
 
@@ -127,6 +170,7 @@ export const D3SimpleView = ({
     // Group by level
     const nodesByLevel = new Map<number, CustomNode[]>();
     visibleNodes.forEach((node) => {
+      if (!visibleNodeIdsSet.has(node.id)) return;
       const level = node.data.metadata.level;
       if (!nodesByLevel.has(level)) nodesByLevel.set(level, []);
       nodesByLevel.get(level)!.push(node);
@@ -143,17 +187,13 @@ export const D3SimpleView = ({
       levelNodes: CustomNode[],
     ): { x: number; y: number } => {
       switch (layoutMode) {
-        case "radial-tree": // Simple and guarantees no overlap // Radial tree layout - divides angles evenly like pizza slices
-        {
+        case "radial-tree": {
           if (level === 0) {
             return { x: centerX, y: centerY };
           }
 
-          // Calculate this level's angle slice (360° divided by node count)
           const anglePerNode = (2 * Math.PI) / levelNodes.length;
           const startAngle = anglePerNode * index;
-
-          // Calculate radius with spacing to prevent overlap
           const radius = 120 + (level - 1) * 100;
 
           return {
@@ -162,7 +202,7 @@ export const D3SimpleView = ({
           };
         }
 
-        case "progressive": { // Progressive radial spacing: exponential growth
+        case "progressive": {
           const progressiveRadius = level === 0 ? 0 : 150 * Math.pow(1.8, level - 1);
           const progressiveAngleStep = (2 * Math.PI) / levelNodes.length;
           const progressiveAngle = progressiveAngleStep * index;
@@ -172,27 +212,24 @@ export const D3SimpleView = ({
           };
         }
 
-        case "hierarchical": { // Tree-like hierarchical positioning
+        case "hierarchical": {
           if (level === 0) {
             return { x: centerX, y: centerY };
           }
 
-          // Calculate angular sector for each parent
           const hierParentId = parentMap.get(levelNodes[index].id);
           if (hierParentId) {
             const hierParentNode = nodesByIdMap.get(hierParentId);
             if (hierParentNode) {
-              // Get siblings
               const hierSiblings = childrenMap.get(hierParentId) || [];
               const hierSiblingIndex = hierSiblings.indexOf(levelNodes[index].id);
               const hierTotalSiblings = hierSiblings.length;
 
-              // Calculate base angle from parent's position
               const hierParentAngle = Math.atan2(
                 hierParentNode.y - centerY,
                 hierParentNode.x - centerX,
               );
-              const hierAngleSpread = Math.PI / 3; // 60 degrees spread
+              const hierAngleSpread = Math.PI / 3;
               const hierAngleOffset =
                 (hierSiblingIndex - (hierTotalSiblings - 1) / 2) *
                 (hierAngleSpread / Math.max(hierTotalSiblings - 1, 1));
@@ -205,7 +242,6 @@ export const D3SimpleView = ({
               };
             }
           }
-          // Fallback
           const hierFallbackRadius = 150 + (level - 1) * 100;
           const hierFallbackAngleStep = (2 * Math.PI) / levelNodes.length;
           const hierFallbackAngle = hierFallbackAngleStep * index;
@@ -217,7 +253,6 @@ export const D3SimpleView = ({
 
         case "concentric":
         default: {
-          // Original concentric circles
           const concentricRadiusStep = 200;
           const concentricRadius = level * concentricRadiusStep;
           const concentricAngleStep = (2 * Math.PI) / levelNodes.length;
@@ -261,10 +296,10 @@ export const D3SimpleView = ({
       });
     });
 
-    // Create links
+    // Create links (only for visible nodes)
     const linksList: ForceLink[] = [];
-    edges.forEach((edge) => {
-      if (nodesByIdMap.has(edge.source) && nodesByIdMap.has(edge.target)) {
+    edgesState.forEach((edge) => {
+      if (visibleNodeIdsSet.has(edge.source) && visibleNodeIdsSet.has(edge.target)) {
         linksList.push({
           source: edge.source,
           target: edge.target,
@@ -276,8 +311,9 @@ export const D3SimpleView = ({
       forceNodes: forceNodesList,
       forceLinks: linksList,
       nodesById: nodesByIdMap,
+      visibleNodeIds: visibleNodeIdsSet,
     };
-  }, [nodes, edges, dimensions.width, dimensions.height, layoutMode, searchResults]);
+  }, [nodesState, edgesState, dimensions.width, dimensions.height, layoutMode, searchResults, collapsedNodes]);
 
   // Render function
   const render = useCallback(() => {
@@ -312,7 +348,6 @@ export const D3SimpleView = ({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Level label
       if (transform.k > 0.5) {
         ctx.fillStyle = `rgba(150, 150, 150, ${0.7 - level * 0.1})`;
         ctx.font = `${Math.max(10, 11 / transform.k)}px system-ui, sans-serif`;
@@ -322,31 +357,38 @@ export const D3SimpleView = ({
       }
     }
 
-    // Determine connected nodes when hovering - propagate to all ancestors up to root
+    // Determine connected nodes when hovering
     const connectedNodeIds = new Set<string>();
     if (hoveredNode) {
-      // Add self
       connectedNodeIds.add(hoveredNode.id);
 
-      // Add all ancestors (parent, grandparent, etc.) up to root
-      let currentId: string | undefined = hoveredNode.parentId;
-      while (currentId) {
-        connectedNodeIds.add(currentId);
-        const parentNode = nodesById.get(currentId);
-        currentId = parentNode?.parentId;
-      }
-
-      // Add all descendants (children, grandchildren, etc.)
-      const addDescendants = (nodeId: string) => {
-        const node = nodesById.get(nodeId);
-        if (node) {
-          node.childIds.forEach((childId) => {
+      if (hoveredNode.level === 0) {
+        hoveredNode.childIds.forEach((childId) => {
+          if (visibleNodeIds.has(childId)) {
             connectedNodeIds.add(childId);
-            addDescendants(childId);
-          });
+          }
+        });
+      } else {
+        let currentId: string | undefined = hoveredNode.parentId;
+        while (currentId) {
+          connectedNodeIds.add(currentId);
+          const parentNode = nodesById.get(currentId);
+          currentId = parentNode?.parentId;
         }
-      };
-      addDescendants(hoveredNode.id);
+
+        const addDescendants = (nodeId: string) => {
+          const node = nodesById.get(nodeId);
+          if (node) {
+            node.childIds.forEach((childId) => {
+              if (visibleNodeIds.has(childId)) {
+                connectedNodeIds.add(childId);
+                addDescendants(childId);
+              }
+            });
+          }
+        };
+        addDescendants(hoveredNode.id);
+      }
     }
 
     // Draw links
@@ -389,6 +431,7 @@ export const D3SimpleView = ({
     forceNodes.forEach((node) => {
       const isNodeHovered = hoveredNode?.id === node.id;
       const isConnected = isHovered && connectedNodeIds.has(node.id);
+      const isSelected = selectedNodes.has(node.id);
       const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
 
       // Dim non-connected nodes
@@ -396,10 +439,10 @@ export const D3SimpleView = ({
         ctx.globalAlpha = 0.25;
       }
 
-      // Node circle
+      // Node circle - use lighter color when selected
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = node.color;
+      ctx.fillStyle = isSelected ? "#A5D6A7" : node.color;
       ctx.fill();
 
       // Border
@@ -407,7 +450,16 @@ export const D3SimpleView = ({
       ctx.strokeStyle = isConnected ? "#9370DB" : node.isMatch ? "#FFC107" : node.borderColor;
       ctx.stroke();
 
-      // Highlight
+      // Selection ring (green)
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius + 8 / transform.k, 0, Math.PI * 2);
+        ctx.strokeStyle = "#22C55E";
+        ctx.lineWidth = 3 / transform.k;
+        ctx.stroke();
+      }
+
+      // Highlight ring
       if (isNodeHovered || isConnected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
@@ -457,6 +509,54 @@ export const D3SimpleView = ({
         ctx.fillText(String(node.childIds.length), countX, countY);
       }
 
+      // Expand/Collapse button - positioned at the edge where parent connects
+      if (ALLOW_EXPAND_COLLAPSE && node.childIds.length > 0 && transform.k > 0.6) {
+        const isCollapsed = collapsedNodes.has(node.id);
+        const btnRadius = Math.max(7, 9 / transform.k);
+        
+        // Calculate position at the edge towards parent (or default to bottom-right for root)
+        let btnX: number;
+        let btnY: number;
+        
+        if (node.parentId && nodesById.has(node.parentId)) {
+          const parentNode = nodesById.get(node.parentId)!;
+          // Calculate angle from node to parent
+          const angle = Math.atan2(parentNode.y - node.y, parentNode.x - node.x);
+          // Position button at the edge of the node in the direction of the parent
+          btnX = node.x + Math.cos(angle) * radius;
+          btnY = node.y + Math.sin(angle) * radius;
+        } else {
+          // Root node - position at bottom-right
+          const angle = Math.PI / 4; // 45 degrees
+          btnX = node.x + Math.cos(angle) * radius;
+          btnY = node.y + Math.sin(angle) * radius;
+        }
+
+        // Button background - outline style (stroke only, no fill)
+        ctx.beginPath();
+        ctx.arc(btnX, btnY, btnRadius, 0, Math.PI * 2);
+        ctx.fillStyle = "white";
+        ctx.fill();
+        ctx.lineWidth = 1.5 / transform.k;
+        ctx.strokeStyle = isCollapsed ? "#3B82F6" : "#EF4444";
+        ctx.stroke();
+
+        // Plus/Minus sign
+        ctx.strokeStyle = isCollapsed ? "#3B82F6" : "#EF4444";
+        ctx.lineWidth = 1.5 / transform.k;
+        ctx.beginPath();
+        // Horizontal line
+        ctx.moveTo(btnX - btnRadius * 0.4, btnY);
+        ctx.lineTo(btnX + btnRadius * 0.4, btnY);
+        
+        // Vertical line (only for plus)
+        if (isCollapsed) {
+          ctx.moveTo(btnX, btnY - btnRadius * 0.4);
+          ctx.lineTo(btnX, btnY + btnRadius * 0.4);
+        }
+        ctx.stroke();
+      }
+
       // Label
       if (isNodeHovered || isConnected || transform.k > 0.7) {
         const labelY = node.y + radius + 14 / transform.k;
@@ -486,7 +586,7 @@ export const D3SimpleView = ({
     });
 
     ctx.restore();
-  }, [forceNodes, forceLinks, nodesById, hoveredNode, dimensions, showLevelLabels, showChildCountProp]);
+  }, [forceNodes, forceLinks, nodesById, hoveredNode, selectedNodes, collapsedNodes, dimensions, showLevelLabels, showChildCountProp, visibleNodeIds]);
 
   // Animation loop
   useEffect(() => {
@@ -512,7 +612,6 @@ export const D3SimpleView = ({
       simulationRef.current.stop();
     }
 
-    // Configure forces based on layout mode
     let chargeStrength = -800;
     let chargeDistanceMax = 1000;
     let linkDistance = 150;
@@ -524,7 +623,6 @@ export const D3SimpleView = ({
 
     switch (layoutMode) {
       case "progressive":
-        // Progressive mode: stronger repulsion, weaker positioning
         chargeStrength = -1200;
         chargeDistanceMax = 1500;
         linkDistance = 200;
@@ -535,7 +633,6 @@ export const D3SimpleView = ({
         break;
 
       case "hierarchical":
-        // Hierarchical mode: weaker repulsion, stronger positioning
         chargeStrength = -500;
         chargeDistanceMax = 800;
         linkDistance = 180;
@@ -547,7 +644,6 @@ export const D3SimpleView = ({
 
       case "concentric":
       default:
-        // Default concentric mode
         break;
     }
 
@@ -565,15 +661,11 @@ export const D3SimpleView = ({
           .strength(linkStrength),
       );
 
-    // Apply collision based on mode
     if (collisionMode === "full") {
       simulation.force("collide", forceCollide().radius(collideRadius).strength(collideStrength));
     } else if (collisionMode === "minimal") {
-      // Minimal collision: only prevent nodes from overlapping with each other
-      // but with a smaller radius to allow closer packing
       simulation.force("collide", forceCollide().radius(25).strength(0.5));
     }
-    // "none" mode: no collision force applied
 
     simulation
       .force(
@@ -604,6 +696,7 @@ export const D3SimpleView = ({
       .scaleExtent([0.3, 4])
       .on("zoom", (event) => {
         transformRef.current = event.transform;
+        setViewportTransform({ x: event.transform.x, y: event.transform.y, k: event.transform.k });
       });
 
     select(canvas).call(zoomBehavior);
@@ -625,12 +718,171 @@ export const D3SimpleView = ({
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // Mouse handlers
+  // Get node at position (for click handling)
+  const getNodeAtPosition = useCallback((clientX: number, clientY: number): ForceNode | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+    const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+    let closest: ForceNode | null = null;
+    let minDist = Infinity;
+
+    forceNodes.forEach((node) => {
+      const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
+      const dx = x - node.x;
+      const dy = y - node.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < radius + 8 && dist < minDist) {
+        minDist = dist;
+        closest = node;
+      }
+    });
+
+    return closest;
+  }, [forceNodes]);
+
+  // Check if clicking on expand/collapse button
+  const isClickOnExpandButton = useCallback((node: ForceNode, clientX: number, clientY: number): boolean => {
+    if (!ALLOW_EXPAND_COLLAPSE || node.childIds.length === 0) return false;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return false;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+    const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+    const radius = node.level === 0 ? 22 : node.level === 1 ? 16 : 11;
+    const btnRadius = 9;
+    
+    // Calculate button position (same as in render)
+    let btnX: number;
+    let btnY: number;
+    
+    if (node.parentId && nodesById.has(node.parentId)) {
+      const parentNode = nodesById.get(node.parentId)!;
+      const angle = Math.atan2(parentNode.y - node.y, parentNode.x - node.x);
+      btnX = node.x + Math.cos(angle) * radius;
+      btnY = node.y + Math.sin(angle) * radius;
+    } else {
+      const angle = Math.PI / 4;
+      btnX = node.x + Math.cos(angle) * radius;
+      btnY = node.y + Math.sin(angle) * radius;
+    }
+
+    const dx = x - btnX;
+    const dy = y - btnY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    return dist <= btnRadius + 2;
+  }, [nodesById]);
+
+  // Handle node click for selection
+  const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!ALLOW_SELECTION) return;
+
+    const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
+
+    if (clickedNode) {
+      // Check if clicking on expand/collapse button
+      if (isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
+        setCollapsedNodes((prev) => {
+          const newSet = new Set(prev);
+          if (newSet.has(clickedNode.id)) {
+            newSet.delete(clickedNode.id);
+          } else {
+            newSet.add(clickedNode.id);
+          }
+          return newSet;
+        });
+        return;
+      }
+
+      // Handle selection
+      if (event.ctrlKey || event.metaKey) {
+        setSelectedNodes((prev) => {
+          const newSet = new Set(prev);
+          if (newSet.has(clickedNode.id)) {
+            newSet.delete(clickedNode.id);
+          } else {
+            newSet.add(clickedNode.id);
+          }
+          return newSet;
+        });
+      } else {
+        setSelectedNodes((prev) => {
+          if (prev.has(clickedNode.id) && prev.size === 1) {
+            // Click on already selected single node - show popup for add/delete
+            if (ALLOW_ADD_DELETE) {
+              setPopupNode(clickedNode);
+              setPopupPosition({ x: event.clientX, y: event.clientY });
+              setShowNodePopup(true);
+            }
+            return prev;
+          } else {
+            return new Set([clickedNode.id]);
+          }
+        });
+      }
+    } else {
+      setSelectedNodes(new Set());
+      setShowNodePopup(false);
+    }
+  }, [getNodeAtPosition, isClickOnExpandButton]);
+
+  // Handle mouse down for dragging
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!allowNodeDrag) return;
+
+    const clickedNode = getNodeAtPosition(event.clientX, event.clientY);
+    
+    if (clickedNode && !isClickOnExpandButton(clickedNode, event.clientX, event.clientY)) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+      const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+      dragOffsetRef.current = {
+        x: x - clickedNode.x,
+        y: y - clickedNode.y,
+      };
+
+      setDraggedNode(clickedNode);
+      
+      // Fix node position during drag
+      clickedNode.fx = clickedNode.x;
+      clickedNode.fy = clickedNode.y;
+      
+      simulationRef.current?.alpha(0.3).restart();
+    }
+  }, [allowNodeDrag, getNodeAtPosition, isClickOnExpandButton]);
+
+  // Handle mouse move (for hover and dragging)
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      // Handle dragging
+      if (draggedNode && allowNodeDrag) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+        const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+        draggedNode.fx = x - dragOffsetRef.current.x;
+        draggedNode.fy = y - dragOffsetRef.current.y;
+        
+        simulationRef.current?.alpha(0.3).restart();
+        return;
+      }
+
+      // Handle hover
       const rect = canvas.getBoundingClientRect();
       const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
       const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
@@ -652,16 +904,106 @@ export const D3SimpleView = ({
 
       setHoveredNode(closest);
     },
-    [forceNodes],
+    [forceNodes, draggedNode, allowNodeDrag],
   );
+
+  // Handle mouse up (stop dragging)
+  const handleMouseUp = useCallback(() => {
+    if (draggedNode) {
+      draggedNode.fx = null;
+      draggedNode.fy = null;
+      setDraggedNode(null);
+      simulationRef.current?.alpha(0.3).restart();
+    }
+  }, [draggedNode]);
+
+  // Handle add node
+  const handleAddNode = useCallback(() => {
+    if (!popupNode || !ALLOW_ADD_DELETE) return;
+
+    const newNodeId = `node-${Date.now()}`;
+    const newNodeLevel = popupNode.level + 1;
+    
+    // Create new node data
+    const newNode: CustomNode = {
+      id: newNodeId,
+      type: "custom",
+      position: { x: popupNode.x + 50, y: popupNode.y + 50 },
+      data: {
+        label: `New Node ${newNodeId.slice(-4)}`,
+        metadata: {
+          type: "categoryA",
+          status: "active",
+          level: newNodeLevel,
+        },
+      },
+      style: {
+        background: "#E3F2FD",
+        border: "2px solid #1976D2",
+      },
+    };
+
+    // Create edge from parent to new node
+    const newEdge: Edge = {
+      id: `edge-${Date.now()}`,
+      source: popupNode.id,
+      target: newNodeId,
+    };
+
+    // Update local state
+    setNodesState((prev) => [...prev, newNode]);
+    setEdgesState((prev) => [...prev, newEdge]);
+    
+    setShowNodePopup(false);
+    setPopupNode(null);
+  }, [popupNode]);
+
+  // Handle delete node
+  const handleDeleteNode = useCallback(() => {
+    if (!popupNode || !ALLOW_ADD_DELETE) return;
+
+    // Get all descendants to delete
+    const descendantsToDelete = getAllDescendants(popupNode.id, nodesById);
+    const nodesToDelete = new Set([popupNode.id, ...descendantsToDelete]);
+
+    // Update nodes state - remove the node and all descendants
+    setNodesState((prev) => prev.filter((node) => !nodesToDelete.has(node.id)));
+    
+    // Update edges state - remove edges connected to deleted nodes
+    setEdgesState((prev) => 
+      prev.filter((edge) => 
+        !nodesToDelete.has(edge.source) && !nodesToDelete.has(edge.target)
+      )
+    );
+
+    // Clear selection if deleted node was selected
+    setSelectedNodes((prev) => {
+      const newSet = new Set(prev);
+      nodesToDelete.forEach((id) => newSet.delete(id));
+      return newSet;
+    });
+
+    setShowNodePopup(false);
+    setPopupNode(null);
+  }, [popupNode, nodesById, getAllDescendants]);
 
   return (
     <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative" }}>
       <canvas
         ref={canvasRef}
-        style={{ width: "100%", height: "100%", cursor: hoveredNode ? "pointer" : "grab" }}
+        style={{ 
+          width: "100%", 
+          height: "100%", 
+          cursor: draggedNode ? "grabbing" : hoveredNode ? "pointer" : "grab" 
+        }}
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoveredNode(null)}
+        onMouseLeave={() => {
+          setHoveredNode(null);
+          handleMouseUp();
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onClick={handleCanvasClick}
       />
 
       {hoveredNode && (
@@ -711,6 +1053,7 @@ export const D3SimpleView = ({
             {hoveredNode.childIds.length > 0 && (
               <div style={{ color: "#10B981", marginTop: "4px" }}>
                 👶 {hoveredNode.childIds.length} child{hoveredNode.childIds.length > 1 ? 'ren' : ''}
+                {collapsedNodes.has(hoveredNode.id) && " (collapsed)"}
               </div>
             )}
             {hoveredNode.level === 0 && (
@@ -718,6 +1061,91 @@ export const D3SimpleView = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Node Action Popup */}
+      {ALLOW_ADD_DELETE && showNodePopup && popupNode && (
+        <div
+          style={{
+            position: "fixed",
+            left: popupPosition.x,
+            top: popupPosition.y,
+            transform: "translate(-50%, -100%) translateY(-10px)",
+            background: "white",
+            borderRadius: "8px",
+            padding: "8px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            zIndex: 1000,
+            display: "flex",
+            gap: "8px",
+          }}
+        >
+          <button
+            onClick={handleAddNode}
+            style={{
+              padding: "6px 12px",
+              background: "#3B82F6",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: 500,
+            }}
+          >
+            Add Child
+          </button>
+          {popupNode.level > 0 && (
+            <button
+              onClick={handleDeleteNode}
+              style={{
+                padding: "6px 12px",
+                background: "#EF4444",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+            >
+              Delete
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setShowNodePopup(false);
+              setPopupNode(null);
+            }}
+            style={{
+              padding: "6px 12px",
+              background: "#6B7280",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Click outside to close popup */}
+      {ALLOW_ADD_DELETE && showNodePopup && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 999,
+          }}
+          onClick={() => {
+            setShowNodePopup(false);
+            setPopupNode(null);
+          }}
+        />
       )}
 
       {/* Toolbar */}
