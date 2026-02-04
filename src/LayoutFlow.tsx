@@ -14,6 +14,7 @@ import { RadialView } from "./components/views/RadialView";
 import { D3CanvasView } from "./components/views/D3CanvasView";
 import { D3ClusterView } from "./components/views/D3ClusterView";
 import { D3SimpleView, type LayoutMode, type CollisionMode } from "./components/views/D3SimpleView";
+import { D3ForceTreeView } from "./components/views/D3ForceTreeView";
 import { TreeView } from "./components/views/TreeView";
 import { GoJSView } from "./components/views/GoJSView";
 import { ViewSwitcher } from "./components/controls/ViewSwitcher";
@@ -53,6 +54,7 @@ function LayoutFlowContent() {
       currentView === "d3canvas" ||
       currentView === "d3cluster" ||
       currentView === "d3simple" ||
+      currentView === "d3forcetree" ||
       currentView === "local" ||
       currentView === "tree" ||
       currentView === "gojs"
@@ -107,6 +109,8 @@ function LayoutFlowContent() {
             showTooltipOnHover={d3ShowTooltipOnHover}
           />
         );
+      case "d3forcetree":
+        return <D3ForceTreeView {...commonProps} maxVisibleNodes={config.nodeCount} />;
       case "local":
         return (
           <LocalView

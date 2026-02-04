@@ -28,7 +28,7 @@ export interface CustomNode extends Node {
   data: CustomNodeData;
 }
 
-export type ViewType = "force" | "concentric" | "grid" | "dagre" | "radial" | "d3canvas" | "d3cluster" | "d3simple" | "local" | "tree" | "gojs";
+export type ViewType = "force" | "concentric" | "grid" | "dagre" | "radial" | "d3canvas" | "d3cluster" | "d3simple" | "d3forcetree" | "local" | "tree" | "gojs";
 
 export interface GraphConfig {
   nodeCount: number;

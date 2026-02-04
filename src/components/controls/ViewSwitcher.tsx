@@ -11,6 +11,7 @@ const views: { id: ViewType; label: string; description: string; category: "d3" 
   { id: "d3simple", label: "D3 Simple", description: "Simple d3-force layout", category: "d3" },
   { id: "d3canvas", label: "D3 Canvas", description: "Canvas rendering with limits", category: "d3" },
   { id: "d3cluster", label: "D3 Cluster", description: "D3 hierarchy cluster", category: "d3" },
+  { id: "d3forcetree", label: "D3 Force Tree", description: "Force-directed tree layout", category: "d3" },
   { id: "local", label: "Local", description: "Focus+context view", category: "d3" },
   { id: "gojs", label: "GoJS", description: "GoJS with Overview and Force Layout", category: "gojs" },
   { id: "force", label: "Force", description: "Force-directed layout", category: "reactflow" },
