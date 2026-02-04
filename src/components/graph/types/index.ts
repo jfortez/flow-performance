@@ -97,6 +97,9 @@ export interface GraphActions {
   setNodePosition: (id: string, position: NodePosition) => void;
   setIsDragging: (isDragging: boolean) => void;
   setDimensions: (dimensions: { width: number; height: number }) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  zoomFit: (nodePositions: Map<string, NodePosition>, canvasWidth: number, canvasHeight: number) => void;
 }
 
 export interface GraphMeta {

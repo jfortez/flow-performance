@@ -69,6 +69,7 @@ interface GraphRootProps {
   showChildCount?: boolean;
   simulationSettings?: SimulationSettings;
   defaultCollapsed?: boolean;
+  allowNodeDrag?: boolean;
   children: ReactNode;
 }
 
@@ -81,6 +82,7 @@ export function GraphRoot({
   showChildCount = false,
   simulationSettings = {},
   defaultCollapsed = true,
+  allowNodeDrag = true,
   children,
 }: GraphRootProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,6 +91,8 @@ export function GraphRoot({
   const prevNodesStateRef = useRef<Map<string, { x: number; y: number; vx: number; vy: number }>>(
     new Map(),
   );
+  const prevNodeIdsRef = useRef<Set<string>>(new Set());
+  const prevLinkIdsRef = useRef<Set<string>>(new Set());
 
   const setDimensions = useGraphStore((state) => state.setDimensions);
   const collapsedNodeIds = useGraphStore((state) => state.collapsedNodeIds);
@@ -304,16 +308,40 @@ export function GraphRoot({
   useEffect(() => {
     if (forceNodes.length === 0) return;
 
+    // Check if nodes or links have actually changed (not just their positions)
+    const currentNodeIds = new Set(forceNodes.map((n) => n.id));
+    const currentLinkIds = new Set(
+      forceLinks.map(
+        (l) =>
+          `${typeof l.source === "string" ? l.source : l.source.id}-${typeof l.target === "string" ? l.target : l.target.id}`,
+      ),
+    );
+
+    const nodesChanged =
+      currentNodeIds.size !== prevNodeIdsRef.current.size ||
+      [...currentNodeIds].some((id) => !prevNodeIdsRef.current.has(id));
+    const linksChanged =
+      currentLinkIds.size !== prevLinkIdsRef.current.size ||
+      [...currentLinkIds].some((id) => !prevLinkIdsRef.current.has(id));
+
+    prevNodeIdsRef.current = currentNodeIds;
+    prevLinkIdsRef.current = currentLinkIds;
+
     if (simulationRef.current) {
       const sim = simulationRef.current;
 
-      sim.nodes(forceNodes as SimulationNodeDatum[]);
+      // Only update nodes/links if they've actually changed
+      if (nodesChanged) {
+        sim.nodes(forceNodes as SimulationNodeDatum[]);
+      }
 
-      const linkForce = forceLink(forceLinks as SimulationLinkDatum<SimulationNodeDatum>[])
-        .id((d: SimulationNodeDatum) => (d as ForceNode).id)
-        .distance(settings.linkDistance)
-        .strength(settings.linkStrength);
-      sim.force("link", linkForce);
+      if (linksChanged || nodesChanged) {
+        const linkForce = forceLink(forceLinks as SimulationLinkDatum<SimulationNodeDatum>[])
+          .id((d: SimulationNodeDatum) => (d as ForceNode).id)
+          .distance(settings.linkDistance)
+          .strength(settings.linkStrength);
+        sim.force("link", linkForce);
+      }
 
       const containerWidth = containerRef.current?.getBoundingClientRect().width ?? 800;
       const containerHeight = containerRef.current?.getBoundingClientRect().height ?? 600;
@@ -344,7 +372,11 @@ export function GraphRoot({
         sim.force("collide", null);
       }
 
-      sim.alpha(0.05).restart();
+      // Only gently re-heat the simulation if nodes/links changed, don't fully restart
+      // This prevents the bounce/re-animation effect
+      if (nodesChanged || linksChanged) {
+        sim.alpha(Math.max(0.02, sim.alpha())).restart();
+      }
 
       return;
     }
@@ -428,6 +460,7 @@ export function GraphRoot({
       getNodeRadius,
       showLevelLabels,
       showChildCount,
+      allowNodeDrag,
     }),
     [
       simulationRef,
@@ -441,6 +474,7 @@ export function GraphRoot({
       getNodeRadius,
       showLevelLabels,
       showChildCount,
+      allowNodeDrag,
     ],
   );
 

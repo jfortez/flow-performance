@@ -10,7 +10,9 @@ export function GraphCanvas() {
   const transformRef = useRef(zoomIdentity);
   
   const hoveredNodeIdRef = useRef<string | null>(null);
+  const hoveredLinkRef = useRef<import("../types").ForceLink | null>(null);
   const isHoveringRef = useRef(false);
+  const isHoveringLinkRef = useRef(false);
   const draggedNodeRef = useRef<import("../types").ForceNode | null>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragStartPosRef = useRef({ x: 0, y: 0 });
@@ -28,6 +30,7 @@ export function GraphCanvas() {
     getNodeRadius,
     showLevelLabels,
     showChildCount,
+    allowNodeDrag,
   } = useGraphEngine();
 
   const setHoveredNode = useGraphStore((state) => state.setHoveredNode);
@@ -85,7 +88,9 @@ export function GraphCanvas() {
     }
 
     const hoveredNodeId = hoveredNodeIdRef.current;
+    const hoveredLink = hoveredLinkRef.current;
     const isHovered = isHoveringRef.current;
+    const isLinkHovered = isHoveringLinkRef.current;
     const hoveredNode = hoveredNodeId ? nodesById.get(hoveredNodeId) : null;
 
     const connectedNodeIds = new Set<string>();
@@ -130,10 +135,16 @@ export function GraphCanvas() {
 
       if (!source || !target) continue;
 
+      const isLinkMatch = isLinkHovered && hoveredLink === link;
       const isConnected =
         isHovered && connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id);
 
-      if (isHovered && !isConnected) {
+      if (isLinkMatch) {
+        ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
+        ctx.lineWidth = 3 / transform.k;
+        ctx.shadowColor = "rgba(34, 197, 94, 0.5)";
+        ctx.shadowBlur = 12 / transform.k;
+      } else if (isHovered && !isConnected) {
         ctx.strokeStyle = "rgba(150, 150, 150, 0.1)";
         ctx.lineWidth = 0.5 / transform.k;
       } else if (isConnected) {
@@ -151,27 +162,39 @@ export function GraphCanvas() {
       ctx.lineTo(target.x, target.y);
       ctx.stroke();
 
-      if (isConnected) {
+      if (isLinkMatch || isConnected) {
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
       }
     }
 
+    // Get link-connected node IDs for link hover highlighting
+    const linkConnectedNodeIds = new Set<string>();
+    if (isLinkHovered && hoveredLink) {
+      const sourceId = typeof hoveredLink.source === "string" ? hoveredLink.source : hoveredLink.source.id;
+      const targetId = typeof hoveredLink.target === "string" ? hoveredLink.target : hoveredLink.target.id;
+      linkConnectedNodeIds.add(sourceId);
+      linkConnectedNodeIds.add(targetId);
+    }
+
     for (const node of forceNodes) {
       const isNodeHovered = hoveredNode?.id === node.id;
       const isConnected = isHovered && connectedNodeIds.has(node.id);
+      const isLinkConnected = isLinkHovered && linkConnectedNodeIds.has(node.id);
       const isSelected = selectedNodeIds.has(node.id);
       const radius = getNodeRadius(node.level ?? 0);
 
-      if (isHovered && !isConnected) ctx.globalAlpha = 0.25;
+      if ((isHovered || isLinkHovered) && !isConnected && !isLinkConnected) ctx.globalAlpha = 0.25;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
       ctx.fillStyle = isSelected ? "#A5D6A7" : (node.color ?? "#E3F2FD");
       ctx.fill();
 
-      ctx.lineWidth = (isNodeHovered ? 4 : isConnected ? 3 : 2) / transform.k;
-      ctx.strokeStyle = isConnected
+      ctx.lineWidth = (isNodeHovered ? 4 : isConnected || isLinkConnected ? 3 : 2) / transform.k;
+      ctx.strokeStyle = isLinkConnected
+        ? "#22C55E"
+        : isConnected
         ? "#9370DB"
         : node.isMatch
         ? "#FFC107"
@@ -186,10 +209,14 @@ export function GraphCanvas() {
         ctx.stroke();
       }
 
-      if (isNodeHovered || isConnected) {
+      if (isNodeHovered || isConnected || isLinkConnected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
-        ctx.strokeStyle = isNodeHovered ? "rgba(255, 193, 7, 0.6)" : "rgba(147, 112, 219, 0.5)";
+        ctx.strokeStyle = isNodeHovered 
+          ? "rgba(255, 193, 7, 0.6)" 
+          : isLinkConnected 
+          ? "rgba(34, 197, 94, 0.5)"
+          : "rgba(147, 112, 219, 0.5)";
         ctx.lineWidth = 3 / transform.k;
         ctx.stroke();
       }
@@ -326,6 +353,8 @@ export function GraphCanvas() {
     };
   }, [render]);
 
+  const viewportTransform = useGraphStore((state) => state.viewportTransform);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -344,7 +373,21 @@ export function GraphCanvas() {
       });
 
     select(canvas).call(zoomBehavior);
-  }, [setViewportTransform]);
+
+    // Sync external transform changes to D3 zoom
+    const currentTransform = transformRef.current;
+    if (
+      currentTransform.x !== viewportTransform.x ||
+      currentTransform.y !== viewportTransform.y ||
+      currentTransform.k !== viewportTransform.k
+    ) {
+      const newTransform = zoomIdentity
+        .translate(viewportTransform.x, viewportTransform.y)
+        .scale(viewportTransform.k);
+      select(canvas).call(zoomBehavior.transform, newTransform);
+      transformRef.current = newTransform;
+    }
+  }, [setViewportTransform, viewportTransform]);
 
   useEffect(() => {
     const update = () => {
@@ -416,6 +459,81 @@ export function GraphCanvas() {
       return closest;
     },
     [forceNodes, getNodeRadius],
+  );
+
+  const pointToLineDistance = useCallback(
+    (
+      px: number,
+      py: number,
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+    ): number => {
+      const A = px - x1;
+      const B = py - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+
+      const dot = A * C + B * D;
+      const lenSq = C * C + D * D;
+      let param = -1;
+
+      if (lenSq !== 0) {
+        param = dot / lenSq;
+      }
+
+      let xx: number;
+      let yy: number;
+
+      if (param < 0) {
+        xx = x1;
+        yy = y1;
+      } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+      } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+      }
+
+      const dx = px - xx;
+      const dy = py - yy;
+
+      return Math.sqrt(dx * dx + dy * dy);
+    },
+    [],
+  );
+
+  const getLinkAtPosition = useCallback(
+    (clientX: number, clientY: number): import("../types").ForceLink | null => {
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+      const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+
+      let closestLink: import("../types").ForceLink | null = null;
+      let minDist = Infinity;
+      const threshold = 8;
+
+      for (const link of forceLinks) {
+        const source = typeof link.source === "string" ? nodesById.get(link.source) : link.source;
+        const target = typeof link.target === "string" ? nodesById.get(link.target) : link.target;
+
+        if (!source || !target) continue;
+
+        const dist = pointToLineDistance(x, y, source.x, source.y, target.x, target.y);
+        if (dist < threshold && dist < minDist) {
+          minDist = dist;
+          closestLink = link;
+        }
+      }
+
+      return closestLink;
+    },
+    [forceLinks, nodesById, pointToLineDistance],
   );
 
   const isClickOnExpandButton = useCallback(
@@ -525,7 +643,7 @@ export function GraphCanvas() {
       }
 
       clickedOnExpandButtonRef.current = false;
-      if (!clickedNode) return;
+      if (!clickedNode || !allowNodeDrag) return;
 
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -542,7 +660,7 @@ export function GraphCanvas() {
       clickedNode.fy = clickedNode.y;
       simulationRef.current?.alpha(0.3).restart();
     },
-    [getNodeAtPosition, isClickOnExpandButton, setIsDragging, simulationRef],
+    [getNodeAtPosition, isClickOnExpandButton, setIsDragging, simulationRef, allowNodeDrag],
   );
 
   const [isHoveringState, setIsHoveringState] = useState(false);
@@ -552,7 +670,7 @@ export function GraphCanvas() {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      if (draggedNodeRef.current) {
+      if (draggedNodeRef.current && allowNodeDrag) {
         const dx = event.clientX - dragStartPosRef.current.x;
         const dy = event.clientY - dragStartPosRef.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -565,6 +683,8 @@ export function GraphCanvas() {
           }
           hoveredNodeIdRef.current = null;
           isHoveringRef.current = false;
+          hoveredLinkRef.current = null;
+          isHoveringLinkRef.current = false;
           setIsHoveringState(false);
           setHoveredNode(null);
         }
@@ -584,6 +704,7 @@ export function GraphCanvas() {
       const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
       const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
+      // Check for node hover first
       let closestNode: import("../types").ForceNode | undefined;
       let minDist = Infinity;
 
@@ -607,14 +728,40 @@ export function GraphCanvas() {
         if (hoveredNodeIdRef.current !== nodeId) {
           hoveredNodeIdRef.current = nodeId;
           isHoveringRef.current = true;
+          hoveredLinkRef.current = null;
+          isHoveringLinkRef.current = false;
           setIsHoveringState(true);
           setHoveredNode(nodeId);
         }
-      } else if (!tooltipTimeoutRef.current) {
+        return;
+      }
+
+      // Check for link hover when no node is hovered
+      const closestLink = getLinkAtPosition(event.clientX, event.clientY);
+      if (closestLink) {
+        if (tooltipTimeoutRef.current) {
+          clearTimeout(tooltipTimeoutRef.current);
+          tooltipTimeoutRef.current = null;
+        }
+        if (hoveredLinkRef.current !== closestLink) {
+          hoveredNodeIdRef.current = null;
+          isHoveringRef.current = false;
+          hoveredLinkRef.current = closestLink;
+          isHoveringLinkRef.current = true;
+          setIsHoveringState(true);
+          setHoveredNode(null);
+        }
+        return;
+      }
+
+      // Clear hover state if neither node nor link is hovered
+      if (!tooltipTimeoutRef.current) {
         tooltipTimeoutRef.current = setTimeout(() => {
-          if (hoveredNodeIdRef.current !== null) {
+          if (hoveredNodeIdRef.current !== null || hoveredLinkRef.current !== null) {
             hoveredNodeIdRef.current = null;
             isHoveringRef.current = false;
+            hoveredLinkRef.current = null;
+            isHoveringLinkRef.current = false;
             setIsHoveringState(false);
             setHoveredNode(null);
           }
@@ -622,7 +769,7 @@ export function GraphCanvas() {
         }, 150);
       }
     },
-    [forceNodes, isDragging, setHoveredNode, setIsDragging, getNodeRadius, simulationRef],
+    [forceNodes, isDragging, setHoveredNode, setIsDragging, getNodeRadius, simulationRef, allowNodeDrag, getLinkAtPosition],
   );
 
   const handleMouseUp = useCallback(() => {

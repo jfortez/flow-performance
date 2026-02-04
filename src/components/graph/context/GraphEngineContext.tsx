@@ -16,6 +16,7 @@ interface GraphEngineContextValue {
   getNodeRadius: (level: number) => number;
   showLevelLabels: boolean;
   showChildCount: boolean;
+  allowNodeDrag: boolean;
 }
 
 export const GraphEngineContext = createContext<GraphEngineContextValue | null>(null);

@@ -3,6 +3,7 @@ import type { Edge } from "@xyflow/react";
 import type { CustomNode } from "../../types";
 import { Graph } from "../graph";
 import type { D3Node, D3Link } from "../graph";
+import { useGraphStore } from "../graph/store/graphStore";
 import { Toolbar } from "../controls/Toolbar";
 import styles from "./D3SimpleView.module.css";
 
@@ -67,6 +68,14 @@ export const D3SimpleView = ({
     }));
   }, [edgesState]);
 
+  const zoomIn = useGraphStore((state) => state.zoomIn);
+  const zoomOut = useGraphStore((state) => state.zoomOut);
+  const zoomFit = useGraphStore((state) => state.zoomFit);
+  const expandAll = useGraphStore((state) => state.expandAll);
+  const collapseAll = useGraphStore((state) => state.collapseAll);
+  const nodePositions = useGraphStore((state) => state.nodePositions);
+  const dimensions = useGraphStore((state) => state.dimensions);
+
   const handleAddNode = useCallback(() => {
     // Implementation would use graph store
     console.log("Add node");
@@ -78,24 +87,28 @@ export const D3SimpleView = ({
   }, []);
 
   const onZoomFit = useCallback(() => {
-    console.log("Zoom fit not yet implemented");
-  }, []);
+    zoomFit(nodePositions, dimensions.width, dimensions.height);
+  }, [zoomFit, nodePositions, dimensions]);
 
   const onZoomIn = useCallback(() => {
-    console.log("Zoom in not yet implemented");
-  }, []);
+    zoomIn();
+  }, [zoomIn]);
 
   const onZoomOut = useCallback(() => {
-    console.log("Zoom out not yet implemented");
-  }, []);
+    zoomOut();
+  }, [zoomOut]);
 
   const onExpandAll = useCallback(() => {
-    console.log("Expand all not yet implemented");
-  }, []);
+    expandAll();
+  }, [expandAll]);
 
   const onCollapseAll = useCallback(() => {
-    console.log("Collapse all not yet implemented");
-  }, []);
+    // Collapse all nodes except root (level 0)
+    const nonRootNodeIds = nodesState
+      .filter((node) => node.data.metadata.level !== 0)
+      .map((node) => node.id);
+    collapseAll(nonRootNodeIds);
+  }, [collapseAll, nodesState]);
 
   return (
     <div className={styles.d3SimpleView}>
@@ -106,6 +119,7 @@ export const D3SimpleView = ({
         collisionMode={collisionMode}
         showLevelLabels={showLevelLabels}
         showChildCount={showChildCountProp}
+        allowNodeDrag={allowNodeDrag}
       >
         {showTooltipOnHover && (
           <Graph.NodeTooltip position="top-center">

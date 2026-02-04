@@ -86,4 +86,55 @@ export const useGraphStore = create<GraphStore>((set) => ({
   setDimensions: (dimensions: { width: number; height: number }) => {
     set({ dimensions });
   },
+
+  zoomIn: () => {
+    set((state) => ({
+      viewportTransform: {
+        ...state.viewportTransform,
+        k: Math.min(state.viewportTransform.k * 1.2, 4),
+      },
+    }));
+  },
+
+  zoomOut: () => {
+    set((state) => ({
+      viewportTransform: {
+        ...state.viewportTransform,
+        k: Math.max(state.viewportTransform.k / 1.2, 0.3),
+      },
+    }));
+  },
+
+  zoomFit: (nodePositions: Map<string, NodePosition>, canvasWidth: number, canvasHeight: number) => {
+    if (nodePositions.size === 0) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const pos of nodePositions.values()) {
+      minX = Math.min(minX, pos.x);
+      minY = Math.min(minY, pos.y);
+      maxX = Math.max(maxX, pos.x);
+      maxY = Math.max(maxY, pos.y);
+    }
+
+    const graphWidth = maxX - minX;
+    const graphHeight = maxY - minY;
+
+    if (graphWidth === 0 || graphHeight === 0) return;
+
+    const padding = 50;
+    const scaleX = (canvasWidth - padding * 2) / graphWidth;
+    const scaleY = (canvasHeight - padding * 2) / graphHeight;
+    const k = Math.min(scaleX, scaleY, 4);
+
+    const x = canvasWidth / 2 - ((minX + maxX) / 2) * k;
+    const y = canvasHeight / 2 - ((minY + maxY) / 2) * k;
+
+    set({
+      viewportTransform: { x, y, k: Math.max(k, 0.3) },
+    });
+  },
 }));
