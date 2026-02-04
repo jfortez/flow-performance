@@ -113,22 +113,88 @@ export const GoJSView = ({
 
     const $ = go.GraphObject.make;
 
-    // Create diagram with ForceDirectedLayout - optimized for radial distribution
+    // Custom ForceDirectedLayout with radial positioning
+    class RadialForceDirectedLayout extends go.ForceDirectedLayout {
+      doLayout(coll: go.Diagram | go.Group | go.Iterable<go.Part>): void {
+        super.doLayout(coll);
+        
+        // After force layout, apply radial adjustment based on levels
+        const diagram = this.diagram;
+        if (!diagram) return;
+        
+        const nodesByLevel = new Map<number, go.Node[]>();
+        
+        // Group nodes by level
+        diagram.nodes.each((node) => {
+          if (!node.visible) return;
+          const level = node.data?.level ?? 0;
+          if (!nodesByLevel.has(level)) {
+            nodesByLevel.set(level, []);
+          }
+          nodesByLevel.get(level)!.push(node);
+        });
+        
+        // Calculate radius for each level
+        const levelRadii = new Map<number, number>();
+        let currentRadius = 0;
+        const radiusStep = 180; // Distance between levels
+        
+        const sortedLevels = Array.from(nodesByLevel.keys()).sort((a, b) => a - b);
+        sortedLevels.forEach((level) => {
+          if (level === 0) {
+            levelRadii.set(level, 0);
+          } else {
+            currentRadius += radiusStep;
+            levelRadii.set(level, currentRadius);
+          }
+        });
+        
+        // Position nodes in circular rings by level
+        sortedLevels.forEach((level) => {
+          const nodes = nodesByLevel.get(level)!;
+          const radius = levelRadii.get(level)!;
+          const count = nodes.length;
+          
+          if (level === 0) {
+            // Center root node
+            nodes[0].move(new go.Point(0, 0));
+          } else {
+            // Distribute nodes in a circle
+            const angleStep = (2 * Math.PI) / count;
+            nodes.forEach((node, index) => {
+              const angle = index * angleStep;
+              const x = radius * Math.cos(angle);
+              const y = radius * Math.sin(angle);
+              // Blend between force position and radial position
+              const forceX = node.location.x;
+              const forceY = node.location.y;
+              const blendFactor = 0.4; // 40% radial, 60% force
+              const finalX = forceX * (1 - blendFactor) + x * blendFactor;
+              const finalY = forceY * (1 - blendFactor) + y * blendFactor;
+              node.move(new go.Point(finalX, finalY));
+            });
+          }
+        });
+      }
+    }
+
+    // Create diagram with custom radial force layout
     const myDiagram = $(go.Diagram, container, {
       initialContentAlignment: go.Spot.Center,
-      layout: $(go.ForceDirectedLayout, {
-        defaultSpringLength: 180,
+      layout: $(RadialForceDirectedLayout, {
+        defaultSpringLength: 120,
         defaultElectricalCharge: 800,
         defaultGravitationalMass: 0,
-        infinityDistance: 250,
-        maxIterations: 1000,
-        epsilonDistance: 0.05,
+        infinityDistance: 300,
+        maxIterations: 800,
+        epsilonDistance: 0.1,
       }),
       "commandHandler.copiesTree": true,
       "commandHandler.deletesTree": true,
       "draggingTool.dragsTree": true,
       "undoManager.isEnabled": true,
       initialAutoScale: go.AutoScale.Uniform,
+      padding: 80,
     });
 
     // Helper function to get connected nodes and links for highlighting
