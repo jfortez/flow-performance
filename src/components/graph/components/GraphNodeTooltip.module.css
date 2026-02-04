@@ -1,0 +1,6 @@
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  transform: translate(-50%, -100%);
+}

@@ -1,0 +1,6 @@
+.toolbar {
+  position: absolute;
+  z-index: 1001;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
