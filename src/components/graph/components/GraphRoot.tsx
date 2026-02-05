@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/refs */
 import { useEffect, useRef, useMemo } from "react";
 import type { ReactNode } from "react";
 import {
@@ -106,7 +105,7 @@ export function GraphRoot({
   useEffect(() => {
     // Only collapse on initial mount, not when nodes change
     if (hasInitializedCollapse.current) return;
-    
+
     const nodeIdsToCollapse = initialNodes
       .filter((node) => {
         if (defaultCollapsed) {
@@ -118,6 +117,7 @@ export function GraphRoot({
 
     collapseAll(nodeIdsToCollapse);
     hasInitializedCollapse.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run on mount
 
   const settings = useMemo(() => {
@@ -266,8 +266,6 @@ export function GraphRoot({
         const forceNode: ForceNode = {
           ...node,
           label: node.label ?? "",
-          color: node.color ?? "#E3F2FD",
-          borderColor: node.borderColor ?? "#1976D2",
           type: node.type ?? "default",
           level: node.level ?? 0,
           isMatch: node.isMatch ?? false,

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { Edge } from "@xyflow/react";
 import type { CustomNode } from "../../types";
 import { Graph } from "../graph";
@@ -33,6 +33,14 @@ export const D3SimpleView = ({
 }: D3SimpleViewProps) => {
   const [nodesState, setNodesState] = useState<CustomNode[]>(initialNodes);
   const [edgesState, setEdgesState] = useState<Edge[]>(initialEdges);
+
+  // Sync with prop changes (e.g., when config changes in UnifiedControls)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNodesState(initialNodes);
+    setEdgesState(initialEdges);
+  }, [initialNodes, initialEdges]);
+
   const [isOverviewOpen, setIsOverviewOpen] = useState(true);
   const [allowNodeDrag, setAllowNodeDrag] = useState(true);
   const selectedNodeIds = useGraphStore((state) => state.selectedNodeIds);
@@ -54,11 +62,13 @@ export const D3SimpleView = ({
       return {
         id: node.id,
         label: node.data.label,
-        color: style?.background || "#bc1234",
-        borderColor: isMatch ? "#0b09ae" : style?.border?.split(" ")[2] || "#1976D2",
         type: node.data.metadata.type,
         level: node.data.metadata.level,
         isMatch,
+        styles: {
+          backgroundColor: style?.background || "#E3F2FD",
+          borderColor: isMatch ? "#FFC107" : style?.border?.split(" ")[2] || "#1976D2",
+        },
       };
     });
   }, [nodesState, searchResultsMap]);

@@ -201,6 +201,15 @@ export function GraphCanvas() {
     const highlightedNodeIds = new Set<string>();
     if (highlightSelectedDescendants && selectedNode) {
       highlightedNodeIds.add(selectedNode.id);
+
+      // Add all ancestors (parent, grandparent, etc.) - similar to hover behavior
+      let currentAncestorId: string | undefined = selectedNode.parentId;
+      while (currentAncestorId) {
+        highlightedNodeIds.add(currentAncestorId);
+        const ancestorNode = nodesById.get(currentAncestorId);
+        currentAncestorId = ancestorNode?.parentId;
+      }
+
       // Add only direct children (1 level deep)
       const childIds = selectedNode.childIds;
       if (childIds) {
@@ -219,21 +228,22 @@ export function GraphCanvas() {
       const isLinkMatch = isLinkHovered && hoveredLink === link;
       const isConnected =
         isHovered && connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id);
-      
+
       // Check if link is highlighted from selection (connects selected node to its direct children)
       const isSourceHighlighted = highlightedNodeIds.has(source.id);
       const isTargetHighlighted = highlightedNodeIds.has(target.id);
       const isLinkHighlighted = isSourceHighlighted && isTargetHighlighted;
-      
+
       // Check if link is connected to selected node
       const isSourceSelected = selectedNodeId === source.id;
       const isTargetSelected = selectedNodeId === target.id;
       const isLinkConnectedToSelection = isSourceSelected || isTargetSelected;
-      
+
       // Check if link connects selected node to its parent
-      const isLinkToParent = selectedNode?.parentId && 
+      const isLinkToParent =
+        selectedNode?.parentId &&
         ((source.id === selectedNode.parentId && target.id === selectedNodeId) ||
-         (target.id === selectedNode.parentId && source.id === selectedNodeId));
+          (target.id === selectedNode.parentId && source.id === selectedNodeId));
 
       if (isLinkMatch) {
         // Link hover - amber/gold color
@@ -302,22 +312,30 @@ export function GraphCanvas() {
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      // Selected nodes use the same fill as hover (purple tint)
-      ctx.fillStyle = isSelected ? NODE_FILL_SELECTED : (node.color ?? NODE_FILL_DEFAULT);
+      // Use styles.color for fill, fallback to defaults
+      ctx.fillStyle = isSelected
+        ? NODE_FILL_SELECTED
+        : (node.styles?.backgroundColor ?? NODE_FILL_DEFAULT);
       ctx.fill();
 
-      ctx.lineWidth = (isNodeHovered ? LINE_WIDTH_HOVER : isConnected || isLinkConnected || isHighlighted || isSelected ? LINE_WIDTH_EXTRA_BOLD : LINE_WIDTH_BOLD) / transform.k;
+      ctx.lineWidth =
+        (isNodeHovered
+          ? LINE_WIDTH_HOVER
+          : isConnected || isLinkConnected || isHighlighted || isSelected
+            ? LINE_WIDTH_EXTRA_BOLD
+            : LINE_WIDTH_BOLD) / transform.k;
       // Selected nodes and highlighted children use GREEN border
       // Link hover nodes use AMBER border
-      ctx.strokeStyle = isSelected || isHighlighted
-        ? NODE_BORDER_LINK_CONNECTED // Green for selected and highlighted children
-        : isLinkConnected
-          ? NODE_BORDER_LINK_HOVER // Amber for link hover
-          : isConnected
-            ? NODE_BORDER_CONNECTED
-            : node.isMatch
-              ? NODE_BORDER_MATCH
-              : (node.borderColor ?? NODE_BORDER_DEFAULT);
+      ctx.strokeStyle =
+        isSelected || isHighlighted
+          ? NODE_BORDER_LINK_CONNECTED // Green for selected and highlighted children
+          : isLinkConnected
+            ? NODE_BORDER_LINK_HOVER // Amber for link hover
+            : isConnected
+              ? NODE_BORDER_CONNECTED
+              : node.isMatch
+                ? NODE_BORDER_MATCH
+                : (node.styles?.borderColor ?? NODE_BORDER_DEFAULT);
       ctx.stroke();
 
       // Selection ring - GREEN glow for selected node
@@ -358,7 +376,11 @@ export function GraphCanvas() {
         const badgeY = node.y - radius - badgeRadius / 2;
         ctx.beginPath();
         ctx.arc(node.x, badgeY, badgeRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isConnected ? BADGE_FILL_CONNECTED : node.level === 0 ? BADGE_FILL_ROOT : BADGE_FILL_CHILD;
+        ctx.fillStyle = isConnected
+          ? BADGE_FILL_CONNECTED
+          : node.level === 0
+            ? BADGE_FILL_ROOT
+            : BADGE_FILL_CHILD;
         ctx.fill();
         ctx.lineWidth = LINE_WIDTH_DEFAULT / transform.k;
         ctx.strokeStyle = BADGE_STROKE;
@@ -370,7 +392,12 @@ export function GraphCanvas() {
         ctx.fillText(String(node.level), node.x, badgeY);
       }
 
-      if (showChildCount && node.childIds && node.childIds.length > 0 && transform.k > ZOOM_THRESHOLD_CHILD_COUNT) {
+      if (
+        showChildCount &&
+        node.childIds &&
+        node.childIds.length > 0 &&
+        transform.k > ZOOM_THRESHOLD_CHILD_COUNT
+      ) {
         const countRadius = Math.max(8, 10 / transform.k);
         const countX = node.x + radius * 0.7;
         const countY = node.y - radius * 0.7;
@@ -442,7 +469,11 @@ export function GraphCanvas() {
           3 / transform.k,
         );
         ctx.fill();
-        ctx.fillStyle = isSelected ? LABEL_TEXT_SELECTED : isConnected ? LABEL_TEXT_CONNECTED : LABEL_TEXT_DEFAULT;
+        ctx.fillStyle = isSelected
+          ? LABEL_TEXT_SELECTED
+          : isConnected
+            ? LABEL_TEXT_CONNECTED
+            : LABEL_TEXT_DEFAULT;
         ctx.fillText(node.label ?? "", node.x, labelY);
       }
     }

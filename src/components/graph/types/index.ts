@@ -1,10 +1,8 @@
 import type { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
 
-// Style interfaces for nodes and links
-export interface NodeStyles {
-  color?: string;
-  fill?: string;
-  borderColor?: string;
+// Base style interface for all graph elements
+export interface GraphElementStyle {
+  backgroundColor?: string;
   strokeStyle?: string;
   lineWidth?: number;
   shadowColor?: string;
@@ -12,21 +10,20 @@ export interface NodeStyles {
   opacity?: number;
 }
 
-export interface LinkStyles {
-  color?: string;
-  strokeStyle?: string;
-  lineWidth?: number;
-  shadowColor?: string;
-  shadowBlur?: number;
-  opacity?: number;
+// Node-specific styles extending base
+export interface NodeStyles extends GraphElementStyle {
+  borderColor?: string;
+}
+
+// Link-specific styles extending base  
+export interface LinkStyles extends GraphElementStyle {
   dashPattern?: number[];
 }
 
-export interface D3Node extends SimulationNodeDatum {
+// Base node interface with common properties
+export interface BaseNode extends SimulationNodeDatum {
   id: string;
   label?: string;
-  color?: string;
-  borderColor?: string;
   type?: string;
   level?: number;
   isMatch?: boolean;
@@ -35,13 +32,18 @@ export interface D3Node extends SimulationNodeDatum {
   styles?: NodeStyles;
 }
 
+// D3Node for input data
+export type D3Node = BaseNode
+
+// D3Link for input data
 export interface D3Link extends SimulationLinkDatum<D3Node> {
   source: string | D3Node;
   target: string | D3Node;
   styles?: LinkStyles;
 }
 
-export interface ForceNode extends D3Node {
+// ForceNode with position and velocity for simulation
+export interface ForceNode extends BaseNode {
   x: number;
   y: number;
   vx: number;
@@ -50,9 +52,9 @@ export interface ForceNode extends D3Node {
   initialY: number;
   fx?: number | null;
   fy?: number | null;
-  styles?: NodeStyles;
 }
 
+// ForceLink for simulation
 export interface ForceLink extends SimulationLinkDatum<ForceNode> {
   source: string | ForceNode;
   target: string | ForceNode;
@@ -144,4 +146,4 @@ export interface GraphContextValue {
   simulationSettings: SimulationSettings;
 }
 
-export interface GraphStore extends GraphState, GraphActions {}
+export interface GraphStore extends GraphState, GraphActions { }
