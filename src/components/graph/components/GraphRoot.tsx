@@ -70,7 +70,8 @@ interface GraphRootProps {
   simulationSettings?: SimulationSettings;
   defaultCollapsed?: boolean;
   allowNodeDrag?: boolean;
-  selectChildren?: boolean;
+  highlightSelectedDescendants?: boolean;
+  highlightHoverPaths?: boolean;
   children: ReactNode;
 }
 
@@ -84,7 +85,8 @@ export function GraphRoot({
   simulationSettings = {},
   defaultCollapsed = true,
   allowNodeDrag = true,
-  selectChildren = true,
+  highlightSelectedDescendants = true,
+  highlightHoverPaths = true,
   children,
 }: GraphRootProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -95,12 +97,16 @@ export function GraphRoot({
   );
   const prevNodeIdsRef = useRef<Set<string>>(new Set());
   const prevLinkIdsRef = useRef<Set<string>>(new Set());
+  const hasInitializedCollapse = useRef(false);
 
   const setDimensions = useGraphStore((state) => state.setDimensions);
   const collapsedNodeIds = useGraphStore((state) => state.collapsedNodeIds);
   const collapseAll = useGraphStore((state) => state.collapseAll);
 
   useEffect(() => {
+    // Only collapse on initial mount, not when nodes change
+    if (hasInitializedCollapse.current) return;
+    
     const nodeIdsToCollapse = initialNodes
       .filter((node) => {
         if (defaultCollapsed) {
@@ -111,7 +117,8 @@ export function GraphRoot({
       .map((node) => node.id);
 
     collapseAll(nodeIdsToCollapse);
-  }, [initialNodes, defaultCollapsed, collapseAll]);
+    hasInitializedCollapse.current = true;
+  }, []); // Empty deps - only run on mount
 
   const settings = useMemo(() => {
     const preset = layoutPresets[layoutMode];
@@ -463,7 +470,8 @@ export function GraphRoot({
       showLevelLabels,
       showChildCount,
       allowNodeDrag,
-      selectChildren,
+      highlightSelectedDescendants,
+      highlightHoverPaths,
     }),
     [
       simulationRef,
@@ -478,7 +486,8 @@ export function GraphRoot({
       showLevelLabels,
       showChildCount,
       allowNodeDrag,
-      selectChildren,
+      highlightSelectedDescendants,
+      highlightHoverPaths,
     ],
   );
 

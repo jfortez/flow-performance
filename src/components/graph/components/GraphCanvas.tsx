@@ -13,18 +13,18 @@ import {
   NODE_BORDER_HOVERED,
   NODE_BORDER_CONNECTED,
   NODE_BORDER_LINK_CONNECTED,
+  NODE_BORDER_LINK_HOVER,
+  NODE_SHADOW_LINK_HOVER,
   LINK_STROKE_DEFAULT,
   LINK_STROKE_DIMMED,
   LINK_STROKE_CONNECTED,
-  LINK_STROKE_HOVERED,
   LINK_STROKE_SELECTED,
+  LINK_STROKE_LINK_HOVER,
   LINK_SHADOW_CONNECTED,
-  LINK_SHADOW_HOVERED,
   LINK_SHADOW_SELECTED,
+  LINK_SHADOW_LINK_HOVER,
   NODE_SHADOW_CONNECTED,
-  NODE_SHADOW_LINK_CONNECTED,
   SHADOW_TRANSPARENT,
-  SELECTION_RING_STROKE,
   SELECTION_RING_FILL,
   LABEL_TEXT_DEFAULT,
   LABEL_TEXT_SELECTED,
@@ -93,7 +93,8 @@ export function GraphCanvas() {
     showLevelLabels,
     showChildCount,
     allowNodeDrag,
-    selectChildren,
+    highlightSelectedDescendants,
+    highlightHoverPaths,
   } = useGraphEngine();
 
   const setHoveredNode = useGraphStore((state) => state.setHoveredNode);
@@ -156,8 +157,14 @@ export function GraphCanvas() {
     const isLinkHovered = isHoveringLinkRef.current;
     const hoveredNode = hoveredNodeId ? nodesById.get(hoveredNodeId) : null;
 
+    // Get selected node IDs for highlighting
+    const selectedNodeIds = useGraphStore.getState().selectedNodeIds;
+    const selectedNodeId = selectedNodeIds.size > 0 ? Array.from(selectedNodeIds)[0] : null;
+    const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) : null;
+
+    // Calculate hover-connected nodes (only if highlightHoverPaths is enabled)
     const connectedNodeIds = new Set<string>();
-    if (hoveredNode && isHovered) {
+    if (highlightHoverPaths && hoveredNode && isHovered) {
       connectedNodeIds.add(hoveredNode.id);
 
       if (hoveredNode.level === 0) {
@@ -190,8 +197,18 @@ export function GraphCanvas() {
       }
     }
 
-    // Get selected node IDs for link highlighting
-    const selectedNodeIds = useGraphStore.getState().selectedNodeIds;
+    // Calculate highlighted nodes from selection (only if highlightSelectedDescendants is enabled)
+    const highlightedNodeIds = new Set<string>();
+    if (highlightSelectedDescendants && selectedNode) {
+      highlightedNodeIds.add(selectedNode.id);
+      // Add only direct children (1 level deep)
+      const childIds = selectedNode.childIds;
+      if (childIds) {
+        for (const childId of childIds) {
+          if (visibleNodeIds.has(childId)) highlightedNodeIds.add(childId);
+        }
+      }
+    }
 
     for (const link of forceLinks) {
       const source = typeof link.source === "string" ? nodesById.get(link.source) : link.source;
@@ -203,35 +220,45 @@ export function GraphCanvas() {
       const isConnected =
         isHovered && connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id);
       
-      // Check if link is connected to any selected node
-      const isSourceSelected = selectedNodeIds.has(source.id);
-      const isTargetSelected = selectedNodeIds.has(target.id);
-      const isLinkSelected = isSourceSelected || isTargetSelected;
+      // Check if link is highlighted from selection (connects selected node to its direct children)
+      const isSourceHighlighted = highlightedNodeIds.has(source.id);
+      const isTargetHighlighted = highlightedNodeIds.has(target.id);
+      const isLinkHighlighted = isSourceHighlighted && isTargetHighlighted;
+      
+      // Check if link is connected to selected node
+      const isSourceSelected = selectedNodeId === source.id;
+      const isTargetSelected = selectedNodeId === target.id;
+      const isLinkConnectedToSelection = isSourceSelected || isTargetSelected;
+      
+      // Check if link connects selected node to its parent
+      const isLinkToParent = selectedNode?.parentId && 
+        ((source.id === selectedNode.parentId && target.id === selectedNodeId) ||
+         (target.id === selectedNode.parentId && source.id === selectedNodeId));
 
       if (isLinkMatch) {
-        // Link hover has highest priority
-        ctx.strokeStyle = LINK_STROKE_HOVERED;
+        // Link hover - amber/gold color
+        ctx.strokeStyle = LINK_STROKE_LINK_HOVER;
         ctx.lineWidth = LINE_WIDTH_HEAVY / transform.k;
-        ctx.shadowColor = LINK_SHADOW_HOVERED;
+        ctx.shadowColor = LINK_SHADOW_LINK_HOVER;
         ctx.shadowBlur = SHADOW_BLUR_LARGE / transform.k;
       } else if (isConnected) {
-        // Node hover connection
+        // Node hover connection (purple)
         ctx.strokeStyle = LINK_STROKE_CONNECTED;
         ctx.lineWidth = LINE_WIDTH_EXTRA_BOLD / transform.k;
         ctx.shadowColor = LINK_SHADOW_CONNECTED;
         ctx.shadowBlur = SHADOW_BLUR_DEFAULT / transform.k;
-      } else if (isLinkSelected) {
-        // Link connected to selected node - subtle green (like active button)
+      } else if (isLinkHighlighted || isLinkConnectedToSelection || isLinkToParent) {
+        // Link connected to selected node or its parent - GREEN (same as selection)
         ctx.strokeStyle = LINK_STROKE_SELECTED;
         ctx.lineWidth = LINE_WIDTH_EXTRA_BOLD / transform.k;
         ctx.shadowColor = LINK_SHADOW_SELECTED;
         ctx.shadowBlur = SHADOW_BLUR_DEFAULT / transform.k;
       } else if (isHovered) {
-        // Dimmed when hovering unrelated nodes
+        // When hovering a NODE, only dim links that are NOT connected to the hovered node
         ctx.strokeStyle = LINK_STROKE_DIMMED;
         ctx.lineWidth = LINE_WIDTH_THIN / transform.k;
       } else {
-        // Default
+        // Default - NO dimming when hovering a link
         ctx.strokeStyle = LINK_STROKE_DEFAULT;
         ctx.lineWidth = LINE_WIDTH_MEDIUM / transform.k;
       }
@@ -241,7 +268,7 @@ export function GraphCanvas() {
       ctx.lineTo(target.x, target.y);
       ctx.stroke();
 
-      if (isLinkMatch || isConnected || isLinkSelected) {
+      if (isLinkMatch || isConnected || isLinkHighlighted || isLinkConnectedToSelection) {
         ctx.shadowColor = SHADOW_TRANSPARENT;
         ctx.shadowBlur = 0;
       }
@@ -262,44 +289,64 @@ export function GraphCanvas() {
       const isNodeHovered = hoveredNode?.id === node.id;
       const isConnected = isHovered && connectedNodeIds.has(node.id);
       const isLinkConnected = isLinkHovered && linkConnectedNodeIds.has(node.id);
-      const isSelected = selectedNodeIds.has(node.id);
+      const isSelected = selectedNodeId === node.id;
+      // Highlighted nodes are direct children of selected node (not selected themselves)
+      const isHighlighted = !isSelected && highlightedNodeIds.has(node.id);
       const radius = getNodeRadius(node.level ?? 0);
 
-      if ((isHovered || isLinkHovered) && !isConnected && !isLinkConnected) ctx.globalAlpha = OPACITY_DIMMED;
+      // Dim nodes only when hovering a NODE (not when hovering a link)
+      // When hovering a link, NO nodes should be dimmed
+      // When hovering a node, only dim nodes that are not connected to the hovered node
+      const shouldDim = isHovered && !isConnected && !isSelected && !isHighlighted;
+      if (shouldDim) ctx.globalAlpha = OPACITY_DIMMED;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+      // Selected nodes use the same fill as hover (purple tint)
       ctx.fillStyle = isSelected ? NODE_FILL_SELECTED : (node.color ?? NODE_FILL_DEFAULT);
       ctx.fill();
 
-      ctx.lineWidth = (isNodeHovered ? LINE_WIDTH_HOVER : isConnected || isLinkConnected ? LINE_WIDTH_EXTRA_BOLD : LINE_WIDTH_BOLD) / transform.k;
-      ctx.strokeStyle = isLinkConnected
-        ? NODE_BORDER_LINK_CONNECTED
-        : isConnected
-          ? NODE_BORDER_CONNECTED
-          : node.isMatch
-            ? NODE_BORDER_MATCH
-            : (node.borderColor ?? NODE_BORDER_DEFAULT);
+      ctx.lineWidth = (isNodeHovered ? LINE_WIDTH_HOVER : isConnected || isLinkConnected || isHighlighted || isSelected ? LINE_WIDTH_EXTRA_BOLD : LINE_WIDTH_BOLD) / transform.k;
+      // Selected nodes and highlighted children use GREEN border
+      // Link hover nodes use AMBER border
+      ctx.strokeStyle = isSelected || isHighlighted
+        ? NODE_BORDER_LINK_CONNECTED // Green for selected and highlighted children
+        : isLinkConnected
+          ? NODE_BORDER_LINK_HOVER // Amber for link hover
+          : isConnected
+            ? NODE_BORDER_CONNECTED
+            : node.isMatch
+              ? NODE_BORDER_MATCH
+              : (node.borderColor ?? NODE_BORDER_DEFAULT);
       ctx.stroke();
 
-      // Selection ring (green) - always shown when selected, even when hovered
+      // Selection ring - GREEN glow for selected node
       if (isSelected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 8 / transform.k, 0, Math.PI * 2);
-        ctx.strokeStyle = SELECTION_RING_STROKE;
+        ctx.strokeStyle = NODE_BORDER_LINK_CONNECTED; // Green glow
         ctx.lineWidth = LINE_WIDTH_SELECTION / transform.k;
         ctx.stroke();
       }
 
-      // Hover glow effect (yellow) - additive, shown around selection if present
+      // Hover glow effect - different colors for different hover types
       if (isNodeHovered || isConnected || isLinkConnected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + (isSelected ? 12 : 5) / transform.k, 0, Math.PI * 2);
         ctx.strokeStyle = isNodeHovered
-          ? NODE_BORDER_HOVERED
+          ? NODE_BORDER_HOVERED // Yellow for node hover
           : isLinkConnected
-            ? NODE_SHADOW_LINK_CONNECTED
-            : NODE_SHADOW_CONNECTED;
+            ? NODE_SHADOW_LINK_HOVER // Amber for link hover
+            : NODE_SHADOW_CONNECTED; // Purple for connected
+        ctx.lineWidth = LINE_WIDTH_SELECTION / transform.k;
+        ctx.stroke();
+      }
+
+      // Highlight glow effect (GREEN) for direct children of selected node
+      if (isHighlighted) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
+        ctx.strokeStyle = NODE_BORDER_LINK_CONNECTED; // Green glow for children
         ctx.lineWidth = LINE_WIDTH_SELECTION / transform.k;
         ctx.stroke();
       }
@@ -410,6 +457,8 @@ export function GraphCanvas() {
     showChildCount,
     visibleNodeIds,
     getNodeRadius,
+    highlightSelectedDescendants,
+    highlightHoverPaths,
   ]);
 
   useEffect(() => {
@@ -680,12 +729,8 @@ export function GraphCanvas() {
         isHoveringRef.current = false;
         setHoveredNode(null);
 
-        const multi = event.ctrlKey || event.metaKey;
-        // Get direct children if selectChildren is enabled and not in multi-select mode
-        const childIds = selectChildren && !multi && clickedNode.childIds
-          ? clickedNode.childIds.filter(id => visibleNodeIds.has(id))
-          : undefined;
-        toggleNodeSelection(clickedNode.id, multi, childIds);
+        // Single selection only - no multi-select support
+        toggleNodeSelection(clickedNode.id);
       } else {
         clearSelection();
       }
@@ -699,8 +744,6 @@ export function GraphCanvas() {
       setHoveredNode,
       toggleNodeSelection,
       setIsDragging,
-      selectChildren,
-      visibleNodeIds,
     ],
   );
 
@@ -756,7 +799,7 @@ export function GraphCanvas() {
         const dy = event.clientY - dragStartPosRef.current.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist > 3) {
+        if (dist > 3 && !isDragging) {
           setIsDragging(true);
           if (tooltipTimeoutRef.current) {
             clearTimeout(tooltipTimeoutRef.current);
@@ -770,15 +813,14 @@ export function GraphCanvas() {
           setHoveredNode(null);
         }
 
-        if (isDragging) {
-          const rect = canvas.getBoundingClientRect();
-          const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
-          const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
-          draggedNodeRef.current.fx = x - dragOffsetRef.current.x;
-          draggedNodeRef.current.fy = y - dragOffsetRef.current.y;
-          simulationRef.current?.alpha(0.02).restart();
-          return;
-        }
+        // Always update position when dragging, not just after threshold
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+        const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
+        draggedNodeRef.current.fx = x - dragOffsetRef.current.x;
+        draggedNodeRef.current.fy = y - dragOffsetRef.current.y;
+        simulationRef.current?.alpha(0.02).restart();
+        return;
       }
 
       const rect = canvas.getBoundingClientRect();

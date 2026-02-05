@@ -9,18 +9,22 @@ export const NODE_BORDER_MATCH = "#FFC107";
 export const NODE_BORDER_HOVERED = "rgba(255, 215, 0, 0.9)";
 export const NODE_BORDER_CONNECTED = "#9370DB";
 export const NODE_BORDER_LINK_CONNECTED = "#22C55E";
+export const NODE_BORDER_LINK_HOVER = "rgba(251, 191, 36, 0.9)"; // Amber for link hover nodes
+export const NODE_SHADOW_LINK_HOVER = "rgba(251, 191, 36, 0.5)"; // Amber shadow for link hover
 
 // Link/Edge Colors
 export const LINK_STROKE_DEFAULT = "rgba(100, 100, 100, 0.4)";
 export const LINK_STROKE_DIMMED = "rgba(150, 150, 150, 0.1)";
 export const LINK_STROKE_CONNECTED = "rgba(147, 112, 219, 0.9)";
 export const LINK_STROKE_HOVERED = "rgba(34, 197, 94, 0.9)";
-export const LINK_STROKE_SELECTED = "rgba(34, 197, 94, 0.6)"; // Verde sutil para seleccionado
+export const LINK_STROKE_SELECTED = "rgba(34, 197, 94, 0.9)"; // Verde para seleccionado (mismo que hover)
+export const LINK_STROKE_LINK_HOVER = "rgba(251, 191, 36, 0.9)"; // Amber/dorado para hover en link
 
 // Shadow/Glow Colors
 export const LINK_SHADOW_CONNECTED = "rgba(147, 112, 219, 0.6)";
 export const LINK_SHADOW_HOVERED = "rgba(34, 197, 94, 0.5)";
-export const LINK_SHADOW_SELECTED = "rgba(34, 197, 94, 0.3)";
+export const LINK_SHADOW_SELECTED = "rgba(34, 197, 94, 0.6)";
+export const LINK_SHADOW_LINK_HOVER = "rgba(251, 191, 36, 0.5)"; // Amber shadow for link hover
 export const NODE_SHADOW_CONNECTED = "rgba(147, 112, 219, 0.5)";
 export const NODE_SHADOW_LINK_CONNECTED = "rgba(34, 197, 94, 0.5)";
 export const SHADOW_TRANSPARENT = "transparent";

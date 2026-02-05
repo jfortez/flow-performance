@@ -86,27 +86,27 @@ export const D3SimpleView = ({
       return;
     }
 
-    const parentNode = nodesState.find(n => n.id === selectedId);
+    const parentNode = nodesState.find((n) => n.id === selectedId);
     if (!parentNode) return;
 
     const newId = `node-${Date.now()}`;
     const newLevel = (parentNode.data.metadata.level ?? 0) + 1;
-    
+
     const newNode: CustomNode = {
       id: newId,
-      type: 'custom',
+      type: "custom",
       position: { x: 0, y: 0 },
       data: {
         label: `New Node ${newId.slice(-4)}`,
         metadata: {
-          type: 'endpoint',
+          type: "endpoint",
           level: newLevel,
-          status: 'active',
+          status: "active",
         },
       },
       style: {
-        background: '#E3F2FD',
-        border: '2px solid #1976D2',
+        background: "#E3F2FD",
+        border: "2px solid #1976D2",
       },
     };
 
@@ -116,8 +116,8 @@ export const D3SimpleView = ({
       target: newId,
     };
 
-    setNodesState(prev => [...prev, newNode]);
-    setEdgesState(prev => [...prev, newEdge]);
+    setNodesState((prev) => [...prev, newNode]);
+    setEdgesState((prev) => [...prev, newEdge]);
   }, [selectedNodeIds, nodesState]);
 
   const handleDeleteNode = useCallback(() => {
@@ -127,7 +127,7 @@ export const D3SimpleView = ({
       return;
     }
 
-    const nodeToDelete = nodesState.find(n => n.id === selectedId);
+    const nodeToDelete = nodesState.find((n) => n.id === selectedId);
     if (nodeToDelete?.data.metadata.level === 0) {
       alert("Cannot delete the root node");
       return;
@@ -138,8 +138,8 @@ export const D3SimpleView = ({
     }
 
     // Remove the node and any edges connected to it
-    setNodesState(prev => prev.filter(n => n.id !== selectedId));
-    setEdgesState(prev => prev.filter(e => e.source !== selectedId && e.target !== selectedId));
+    setNodesState((prev) => prev.filter((n) => n.id !== selectedId));
+    setEdgesState((prev) => prev.filter((e) => e.source !== selectedId && e.target !== selectedId));
     clearSelection();
   }, [selectedNodeIds, nodesState, clearSelection]);
 
@@ -150,18 +150,14 @@ export const D3SimpleView = ({
       return;
     }
 
-    const nodeToEdit = nodesState.find(n => n.id === selectedId);
+    const nodeToEdit = nodesState.find((n) => n.id === selectedId);
     if (!nodeToEdit) return;
 
     const newLabel = prompt("Enter new label:", nodeToEdit.data.label);
     if (newLabel === null || newLabel === nodeToEdit.data.label) return;
 
-    setNodesState(prev => 
-      prev.map(n => 
-        n.id === selectedId 
-          ? { ...n, data: { ...n.data, label: newLabel } }
-          : n
-      )
+    setNodesState((prev) =>
+      prev.map((n) => (n.id === selectedId ? { ...n, data: { ...n.data, label: newLabel } } : n)),
     );
   }, [selectedNodeIds, nodesState]);
 
@@ -199,6 +195,8 @@ export const D3SimpleView = ({
         showLevelLabels={showLevelLabels}
         showChildCount={showChildCountProp}
         allowNodeDrag={allowNodeDrag}
+        highlightSelectedDescendants={true}
+        highlightHoverPaths={true}
       >
         {showTooltipOnHover && (
           <Graph.NodeTooltip position="top-center">

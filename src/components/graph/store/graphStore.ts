@@ -18,28 +18,15 @@ export const useGraphStore = create<GraphStore>((set) => ({
     set({ hoveredNodeId: id });
   },
 
-  toggleNodeSelection: (id: string, multi?: boolean, childIds?: string[]) => {
+  toggleNodeSelection: (id: string) => {
     set((state) => {
       const newSelection = new Set(state.selectedNodeIds);
-      if (multi) {
-        if (newSelection.has(id)) {
-          newSelection.delete(id);
-        } else {
-          newSelection.add(id);
-        }
+      // Single selection only - clear any existing selection and select only the clicked node
+      if (newSelection.has(id) && newSelection.size === 1) {
+        newSelection.clear();
       } else {
-        if (newSelection.has(id) && newSelection.size === 1) {
-          newSelection.clear();
-        } else {
-          newSelection.clear();
-          newSelection.add(id);
-          // Add direct children if provided
-          if (childIds) {
-            for (const childId of childIds) {
-              newSelection.add(childId);
-            }
-          }
-        }
+        newSelection.clear();
+        newSelection.add(id);
       }
       return { selectedNodeIds: newSelection };
     });

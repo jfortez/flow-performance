@@ -113,7 +113,7 @@ export interface GraphState {
 
 export interface GraphActions {
   setHoveredNode: (id: string | null) => void;
-  toggleNodeSelection: (id: string, multi?: boolean, childIds?: string[]) => void;
+  toggleNodeSelection: (id: string) => void;
   clearSelection: () => void;
   toggleNodeCollapse: (id: string) => void;
   expandAll: () => void;
