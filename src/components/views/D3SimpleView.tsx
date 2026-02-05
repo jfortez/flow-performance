@@ -188,9 +188,8 @@ export const D3SimpleView = ({
   }, [expandAll]);
 
   const onCollapseAll = useCallback(() => {
-    // Collapse all nodes except root (level 0)
     const nonRootNodeIds = nodesState
-      .filter((node) => node.data.metadata.level !== 0)
+      .filter((node) => node.data.metadata.level === 0)
       .map((node) => node.id);
     collapseAll(nonRootNodeIds);
   }, [collapseAll, nodesState]);
