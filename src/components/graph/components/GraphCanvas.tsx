@@ -5,6 +5,65 @@ import { useGraphStore } from "../store/graphStore";
 import { useGraphEngine } from "../context/GraphEngineContext";
 import styles from "./GraphCanvas.module.css";
 import type { ForceLink, ForceNode, NodePosition } from "../types";
+import {
+  NODE_FILL_DEFAULT,
+  NODE_FILL_SELECTED,
+  NODE_BORDER_DEFAULT,
+  NODE_BORDER_MATCH,
+  NODE_BORDER_HOVERED,
+  NODE_BORDER_CONNECTED,
+  NODE_BORDER_LINK_CONNECTED,
+  LINK_STROKE_DEFAULT,
+  LINK_STROKE_DIMMED,
+  LINK_STROKE_CONNECTED,
+  LINK_STROKE_HOVERED,
+  LINK_SHADOW_CONNECTED,
+  LINK_SHADOW_HOVERED,
+  NODE_SHADOW_CONNECTED,
+  NODE_SHADOW_LINK_CONNECTED,
+  SHADOW_TRANSPARENT,
+  SELECTION_RING_STROKE,
+  SELECTION_RING_FILL,
+  LABEL_TEXT_DEFAULT,
+  LABEL_TEXT_SELECTED,
+  LABEL_TEXT_CONNECTED,
+  LABEL_BACKGROUND_HOVERED,
+  LABEL_BACKGROUND_DEFAULT,
+  LEVEL_RING_STROKE,
+  LEVEL_LABEL_FILL,
+  BADGE_FILL_ROOT,
+  BADGE_FILL_CHILD,
+  BADGE_FILL_CONNECTED,
+  BADGE_STROKE,
+  BADGE_TEXT,
+  CHILD_COUNT_FILL,
+  CHILD_COUNT_TEXT,
+  EXPAND_BUTTON_FILL,
+  EXPAND_BUTTON_STROKE,
+  OPACITY_DIMMED,
+  OPACITY_FULL,
+  LINE_WIDTH_THIN,
+  LINE_WIDTH_DEFAULT,
+  LINE_WIDTH_MEDIUM,
+  LINE_WIDTH_THICK,
+  LINE_WIDTH_BOLD,
+  LINE_WIDTH_EXTRA_BOLD,
+  LINE_WIDTH_HEAVY,
+  LINE_WIDTH_SELECTION,
+  LINE_WIDTH_HOVER,
+  SHADOW_BLUR_DEFAULT,
+  SHADOW_BLUR_LARGE,
+  FONT_SIZE_SMALL,
+  FONT_SIZE_DEFAULT,
+  FONT_SIZE_MEDIUM,
+  FONT_SIZE_LARGE,
+  HOVER_THRESHOLD,
+  ZOOM_THRESHOLD_LABELS,
+  ZOOM_THRESHOLD_CHILD_COUNT,
+  ZOOM_THRESHOLD_EXPAND_BUTTON,
+  ZOOM_THRESHOLD_NODE_LABELS,
+  DASH_PATTERN_LEVEL_RING,
+} from "../constants/colors";
 
 export function GraphCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,15 +132,15 @@ export function GraphCanvas() {
       const radius = level * 120;
       ctx.beginPath();
       ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(200, 200, 200, ${0.3 - level * 0.04})`;
-      ctx.lineWidth = 1 / transform.k;
-      ctx.setLineDash([5 / transform.k, 5 / transform.k]);
+      ctx.strokeStyle = LEVEL_RING_STROKE(level);
+      ctx.lineWidth = LINE_WIDTH_DEFAULT / transform.k;
+      ctx.setLineDash(DASH_PATTERN_LEVEL_RING.map((v) => v / transform.k));
       ctx.stroke();
       ctx.setLineDash([]);
 
-      if (transform.k > 0.5) {
-        ctx.fillStyle = `rgba(150, 150, 150, ${0.7 - level * 0.1})`;
-        ctx.font = `${Math.max(10, 11 / transform.k)}px system-ui, sans-serif`;
+      if (transform.k > ZOOM_THRESHOLD_LABELS) {
+        ctx.fillStyle = LEVEL_LABEL_FILL(level);
+        ctx.font = `${Math.max(FONT_SIZE_MEDIUM, FONT_SIZE_LARGE / transform.k)}px system-ui, sans-serif`;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.fillText(`Level ${level}`, centerX + radius + 8 / transform.k, centerY);
@@ -141,21 +200,21 @@ export function GraphCanvas() {
         isHovered && connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id);
 
       if (isLinkMatch) {
-        ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
-        ctx.lineWidth = 3 / transform.k;
-        ctx.shadowColor = "rgba(34, 197, 94, 0.5)";
-        ctx.shadowBlur = 12 / transform.k;
+        ctx.strokeStyle = LINK_STROKE_HOVERED;
+        ctx.lineWidth = LINE_WIDTH_HEAVY / transform.k;
+        ctx.shadowColor = LINK_SHADOW_HOVERED;
+        ctx.shadowBlur = SHADOW_BLUR_LARGE / transform.k;
       } else if (isHovered && !isConnected) {
-        ctx.strokeStyle = "rgba(150, 150, 150, 0.1)";
-        ctx.lineWidth = 0.5 / transform.k;
+        ctx.strokeStyle = LINK_STROKE_DIMMED;
+        ctx.lineWidth = LINE_WIDTH_THIN / transform.k;
       } else if (isConnected) {
-        ctx.strokeStyle = "rgba(147, 112, 219, 0.9)";
-        ctx.lineWidth = 2.5 / transform.k;
-        ctx.shadowColor = "rgba(147, 112, 219, 0.6)";
-        ctx.shadowBlur = 10 / transform.k;
+        ctx.strokeStyle = LINK_STROKE_CONNECTED;
+        ctx.lineWidth = LINE_WIDTH_EXTRA_BOLD / transform.k;
+        ctx.shadowColor = LINK_SHADOW_CONNECTED;
+        ctx.shadowBlur = SHADOW_BLUR_DEFAULT / transform.k;
       } else {
-        ctx.strokeStyle = "rgba(100, 100, 100, 0.4)";
-        ctx.lineWidth = 1.2 / transform.k;
+        ctx.strokeStyle = LINK_STROKE_DEFAULT;
+        ctx.lineWidth = LINE_WIDTH_MEDIUM / transform.k;
       }
 
       ctx.beginPath();
@@ -164,7 +223,7 @@ export function GraphCanvas() {
       ctx.stroke();
 
       if (isLinkMatch || isConnected) {
-        ctx.shadowColor = "transparent";
+        ctx.shadowColor = SHADOW_TRANSPARENT;
         ctx.shadowBlur = 0;
       }
     }
@@ -187,28 +246,28 @@ export function GraphCanvas() {
       const isSelected = selectedNodeIds.has(node.id);
       const radius = getNodeRadius(node.level ?? 0);
 
-      if ((isHovered || isLinkHovered) && !isConnected && !isLinkConnected) ctx.globalAlpha = 0.25;
+      if ((isHovered || isLinkHovered) && !isConnected && !isLinkConnected) ctx.globalAlpha = OPACITY_DIMMED;
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? "#A5D6A7" : (node.color ?? "#E3F2FD");
+      ctx.fillStyle = isSelected ? NODE_FILL_SELECTED : (node.color ?? NODE_FILL_DEFAULT);
       ctx.fill();
 
-      ctx.lineWidth = (isNodeHovered ? 4 : isConnected || isLinkConnected ? 3 : 2) / transform.k;
+      ctx.lineWidth = (isNodeHovered ? LINE_WIDTH_HOVER : isConnected || isLinkConnected ? LINE_WIDTH_EXTRA_BOLD : LINE_WIDTH_BOLD) / transform.k;
       ctx.strokeStyle = isLinkConnected
-        ? "#22C55E"
+        ? NODE_BORDER_LINK_CONNECTED
         : isConnected
-          ? "#9370DB"
+          ? NODE_BORDER_CONNECTED
           : node.isMatch
-            ? "#FFC107"
-            : (node.borderColor ?? "#1976D2");
+            ? NODE_BORDER_MATCH
+            : (node.borderColor ?? NODE_BORDER_DEFAULT);
       ctx.stroke();
 
       if (isSelected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 8 / transform.k, 0, Math.PI * 2);
-        ctx.strokeStyle = "#22C55E";
-        ctx.lineWidth = 3 / transform.k;
+        ctx.strokeStyle = SELECTION_RING_STROKE;
+        ctx.lineWidth = LINE_WIDTH_SELECTION / transform.k;
         ctx.stroke();
       }
 
@@ -216,49 +275,49 @@ export function GraphCanvas() {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
         ctx.strokeStyle = isNodeHovered
-          ? "rgba(255, 193, 7, 0.6)"
+          ? NODE_BORDER_HOVERED
           : isLinkConnected
-            ? "rgba(34, 197, 94, 0.5)"
-            : "rgba(147, 112, 219, 0.5)";
-        ctx.lineWidth = 3 / transform.k;
+            ? NODE_SHADOW_LINK_CONNECTED
+            : NODE_SHADOW_CONNECTED;
+        ctx.lineWidth = LINE_WIDTH_SELECTION / transform.k;
         ctx.stroke();
       }
 
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = OPACITY_FULL;
 
       if (showLevelLabels) {
         const badgeRadius = Math.max(7, 9 / transform.k);
         const badgeY = node.y - radius - badgeRadius / 2;
         ctx.beginPath();
         ctx.arc(node.x, badgeY, badgeRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isConnected ? "#9370DB" : node.level === 0 ? "#7B1FA2" : "#3B82F6";
+        ctx.fillStyle = isConnected ? BADGE_FILL_CONNECTED : node.level === 0 ? BADGE_FILL_ROOT : BADGE_FILL_CHILD;
         ctx.fill();
-        ctx.lineWidth = 1 / transform.k;
-        ctx.strokeStyle = "white";
+        ctx.lineWidth = LINE_WIDTH_DEFAULT / transform.k;
+        ctx.strokeStyle = BADGE_STROKE;
         ctx.stroke();
-        ctx.fillStyle = "white";
-        ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
+        ctx.fillStyle = BADGE_TEXT;
+        ctx.font = `bold ${Math.max(FONT_SIZE_SMALL, FONT_SIZE_DEFAULT / transform.k)}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(node.level), node.x, badgeY);
       }
 
-      if (showChildCount && node.childIds && node.childIds.length > 0 && transform.k > 0.6) {
+      if (showChildCount && node.childIds && node.childIds.length > 0 && transform.k > ZOOM_THRESHOLD_CHILD_COUNT) {
         const countRadius = Math.max(8, 10 / transform.k);
         const countX = node.x + radius * 0.7;
         const countY = node.y - radius * 0.7;
         ctx.beginPath();
         ctx.arc(countX, countY, countRadius, 0, Math.PI * 2);
-        ctx.fillStyle = "#10B981";
+        ctx.fillStyle = CHILD_COUNT_FILL;
         ctx.fill();
-        ctx.fillStyle = "white";
-        ctx.font = `bold ${Math.max(8, 9 / transform.k)}px system-ui, sans-serif`;
+        ctx.fillStyle = CHILD_COUNT_TEXT;
+        ctx.font = `bold ${Math.max(FONT_SIZE_SMALL, FONT_SIZE_DEFAULT / transform.k)}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(node.childIds.length), countX, countY);
       }
 
-      if (node.childIds && node.childIds.length > 0 && transform.k > 0.6) {
+      if (node.childIds && node.childIds.length > 0 && transform.k > ZOOM_THRESHOLD_EXPAND_BUTTON) {
         const isCollapsed = collapsedNodeIds.has(node.id);
         const btnRadius = Math.max(7, 9 / transform.k);
         let btnX: number;
@@ -276,13 +335,13 @@ export function GraphCanvas() {
 
         ctx.beginPath();
         ctx.arc(btnX, btnY, btnRadius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.fillStyle = EXPAND_BUTTON_FILL;
         ctx.fill();
-        ctx.lineWidth = 1.5 / transform.k;
-        ctx.strokeStyle = "#64748b";
+        ctx.lineWidth = LINE_WIDTH_THICK / transform.k;
+        ctx.strokeStyle = EXPAND_BUTTON_STROKE;
         ctx.stroke();
-        ctx.strokeStyle = "#64748b";
-        ctx.lineWidth = 1.5 / transform.k;
+        ctx.strokeStyle = EXPAND_BUTTON_STROKE;
+        ctx.lineWidth = LINE_WIDTH_THICK / transform.k;
         ctx.beginPath();
         ctx.moveTo(btnX - btnRadius * 0.4, btnY);
         ctx.lineTo(btnX + btnRadius * 0.4, btnY);
@@ -293,19 +352,19 @@ export function GraphCanvas() {
         ctx.stroke();
       }
 
-      if (isNodeHovered || isConnected || isSelected || transform.k > 0.7) {
+      if (isNodeHovered || isConnected || isSelected || transform.k > ZOOM_THRESHOLD_NODE_LABELS) {
         const labelY = node.y + radius + 14 / transform.k;
-        const fontSize = Math.max(10, 11 / transform.k);
+        const fontSize = Math.max(FONT_SIZE_MEDIUM, FONT_SIZE_LARGE / transform.k);
         ctx.font = `${isNodeHovered || isConnected || isSelected ? "bold " : ""}${fontSize}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         const metrics = ctx.measureText(node.label ?? "");
         const padding = 3 / transform.k;
         ctx.fillStyle = isSelected
-          ? "rgba(34, 197, 94, 0.2)"
+          ? SELECTION_RING_FILL
           : isNodeHovered || isConnected
-            ? "rgba(255, 255, 255, 1)"
-            : "rgba(255, 255, 255, 0.95)";
+            ? LABEL_BACKGROUND_HOVERED
+            : LABEL_BACKGROUND_DEFAULT;
         ctx.beginPath();
         ctx.roundRect(
           node.x - metrics.width / 2 - padding,
@@ -315,7 +374,7 @@ export function GraphCanvas() {
           3 / transform.k,
         );
         ctx.fill();
-        ctx.fillStyle = isSelected ? "#16A34A" : isConnected ? "#9370DB" : "#1F2937";
+        ctx.fillStyle = isSelected ? LABEL_TEXT_SELECTED : isConnected ? LABEL_TEXT_CONNECTED : LABEL_TEXT_DEFAULT;
         ctx.fillText(node.label ?? "", node.x, labelY);
       }
     }
@@ -512,7 +571,6 @@ export function GraphCanvas() {
 
       let closestLink: ForceLink | null = null;
       let minDist = Infinity;
-      const threshold = 8;
 
       for (const link of forceLinks) {
         const source = typeof link.source === "string" ? nodesById.get(link.source) : link.source;
@@ -521,7 +579,7 @@ export function GraphCanvas() {
         if (!source || !target) continue;
 
         const dist = pointToLineDistance(x, y, source.x, source.y, target.x, target.y);
-        if (dist < threshold && dist < minDist) {
+        if (dist < HOVER_THRESHOLD && dist < minDist) {
           minDist = dist;
           closestLink = link;
         }
