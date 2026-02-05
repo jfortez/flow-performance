@@ -4,16 +4,17 @@ import { select } from "d3-selection";
 import { useGraphStore } from "../store/graphStore";
 import { useGraphEngine } from "../context/GraphEngineContext";
 import styles from "./GraphCanvas.module.css";
+import type { ForceLink, ForceNode, NodePosition } from "../types";
 
 export function GraphCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const transformRef = useRef(zoomIdentity);
-  
+
   const hoveredNodeIdRef = useRef<string | null>(null);
-  const hoveredLinkRef = useRef<import("../types").ForceLink | null>(null);
+  const hoveredLinkRef = useRef<ForceLink | null>(null);
   const isHoveringRef = useRef(false);
   const isHoveringLinkRef = useRef(false);
-  const draggedNodeRef = useRef<import("../types").ForceNode | null>(null);
+  const draggedNodeRef = useRef<ForceNode | null>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const dragStartPosRef = useRef({ x: 0, y: 0 });
   const clickedOnExpandButtonRef = useRef(false);
@@ -171,8 +172,10 @@ export function GraphCanvas() {
     // Get link-connected node IDs for link hover highlighting
     const linkConnectedNodeIds = new Set<string>();
     if (isLinkHovered && hoveredLink) {
-      const sourceId = typeof hoveredLink.source === "string" ? hoveredLink.source : hoveredLink.source.id;
-      const targetId = typeof hoveredLink.target === "string" ? hoveredLink.target : hoveredLink.target.id;
+      const sourceId =
+        typeof hoveredLink.source === "string" ? hoveredLink.source : hoveredLink.source.id;
+      const targetId =
+        typeof hoveredLink.target === "string" ? hoveredLink.target : hoveredLink.target.id;
       linkConnectedNodeIds.add(sourceId);
       linkConnectedNodeIds.add(targetId);
     }
@@ -195,10 +198,10 @@ export function GraphCanvas() {
       ctx.strokeStyle = isLinkConnected
         ? "#22C55E"
         : isConnected
-        ? "#9370DB"
-        : node.isMatch
-        ? "#FFC107"
-        : (node.borderColor ?? "#1976D2");
+          ? "#9370DB"
+          : node.isMatch
+            ? "#FFC107"
+            : (node.borderColor ?? "#1976D2");
       ctx.stroke();
 
       if (isSelected) {
@@ -212,11 +215,11 @@ export function GraphCanvas() {
       if (isNodeHovered || isConnected || isLinkConnected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
-        ctx.strokeStyle = isNodeHovered 
-          ? "rgba(255, 193, 7, 0.6)" 
-          : isLinkConnected 
-          ? "rgba(34, 197, 94, 0.5)"
-          : "rgba(147, 112, 219, 0.5)";
+        ctx.strokeStyle = isNodeHovered
+          ? "rgba(255, 193, 7, 0.6)"
+          : isLinkConnected
+            ? "rgba(34, 197, 94, 0.5)"
+            : "rgba(147, 112, 219, 0.5)";
         ctx.lineWidth = 3 / transform.k;
         ctx.stroke();
       }
@@ -301,8 +304,8 @@ export function GraphCanvas() {
         ctx.fillStyle = isSelected
           ? "rgba(34, 197, 94, 0.2)"
           : isNodeHovered || isConnected
-          ? "rgba(255, 255, 255, 1)"
-          : "rgba(255, 255, 255, 0.95)";
+            ? "rgba(255, 255, 255, 1)"
+            : "rgba(255, 255, 255, 0.95)";
         ctx.beginPath();
         ctx.roundRect(
           node.x - metrics.width / 2 - padding,
@@ -411,7 +414,7 @@ export function GraphCanvas() {
       const deltaTime = currentTime - lastUpdateTime;
 
       if (deltaTime >= updateInterval) {
-        const positions = new Map<string, import("../types").NodePosition>();
+        const positions = new Map<string, NodePosition>();
         forceNodes.forEach((node) => {
           positions.set(node.id, {
             x: node.x,
@@ -434,7 +437,7 @@ export function GraphCanvas() {
   }, [forceNodes, updateNodePositions]);
 
   const getNodeAtPosition = useCallback(
-    (clientX: number, clientY: number): import("../types").ForceNode | null => {
+    (clientX: number, clientY: number): ForceNode | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
 
@@ -442,7 +445,7 @@ export function GraphCanvas() {
       const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
       const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-      let closest: import("../types").ForceNode | null = null;
+      let closest: ForceNode | null = null;
       let minDist = Infinity;
 
       for (const node of forceNodes) {
@@ -462,14 +465,7 @@ export function GraphCanvas() {
   );
 
   const pointToLineDistance = useCallback(
-    (
-      px: number,
-      py: number,
-      x1: number,
-      y1: number,
-      x2: number,
-      y2: number,
-    ): number => {
+    (px: number, py: number, x1: number, y1: number, x2: number, y2: number): number => {
       const A = px - x1;
       const B = py - y1;
       const C = x2 - x1;
@@ -506,7 +502,7 @@ export function GraphCanvas() {
   );
 
   const getLinkAtPosition = useCallback(
-    (clientX: number, clientY: number): import("../types").ForceLink | null => {
+    (clientX: number, clientY: number): ForceLink | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
 
@@ -514,7 +510,7 @@ export function GraphCanvas() {
       const x = (clientX - rect.left - transformRef.current.x) / transformRef.current.k;
       const y = (clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-      let closestLink: import("../types").ForceLink | null = null;
+      let closestLink: ForceLink | null = null;
       let minDist = Infinity;
       const threshold = 8;
 
@@ -537,7 +533,7 @@ export function GraphCanvas() {
   );
 
   const isClickOnExpandButton = useCallback(
-    (node: import("../types").ForceNode, clientX: number, clientY: number): boolean => {
+    (node: ForceNode, clientX: number, clientY: number): boolean => {
       if (!node.childIds || node.childIds.length === 0) return false;
 
       const canvas = canvasRef.current;
@@ -705,7 +701,7 @@ export function GraphCanvas() {
       const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
       // Check for node hover first
-      let closestNode: import("../types").ForceNode | undefined;
+      let closestNode: ForceNode | undefined;
       let minDist = Infinity;
 
       for (const node of forceNodes) {
@@ -769,7 +765,16 @@ export function GraphCanvas() {
         }, 150);
       }
     },
-    [forceNodes, isDragging, setHoveredNode, setIsDragging, getNodeRadius, simulationRef, allowNodeDrag, getLinkAtPosition],
+    [
+      forceNodes,
+      isDragging,
+      setHoveredNode,
+      setIsDragging,
+      getNodeRadius,
+      simulationRef,
+      allowNodeDrag,
+      getLinkAtPosition,
+    ],
   );
 
   const handleMouseUp = useCallback(() => {
