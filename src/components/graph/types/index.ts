@@ -1,5 +1,27 @@
 import type { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
 
+// Style interfaces for nodes and links
+export interface NodeStyles {
+  color?: string;
+  fill?: string;
+  borderColor?: string;
+  strokeStyle?: string;
+  lineWidth?: number;
+  shadowColor?: string;
+  shadowBlur?: number;
+  opacity?: number;
+}
+
+export interface LinkStyles {
+  color?: string;
+  strokeStyle?: string;
+  lineWidth?: number;
+  shadowColor?: string;
+  shadowBlur?: number;
+  opacity?: number;
+  dashPattern?: number[];
+}
+
 export interface D3Node extends SimulationNodeDatum {
   id: string;
   label?: string;
@@ -10,11 +32,13 @@ export interface D3Node extends SimulationNodeDatum {
   isMatch?: boolean;
   parentId?: string;
   childIds?: string[];
+  styles?: NodeStyles;
 }
 
 export interface D3Link extends SimulationLinkDatum<D3Node> {
   source: string | D3Node;
   target: string | D3Node;
+  styles?: LinkStyles;
 }
 
 export interface ForceNode extends D3Node {
@@ -26,11 +50,13 @@ export interface ForceNode extends D3Node {
   initialY: number;
   fx?: number | null;
   fy?: number | null;
+  styles?: NodeStyles;
 }
 
 export interface ForceLink extends SimulationLinkDatum<ForceNode> {
   source: string | ForceNode;
   target: string | ForceNode;
+  styles?: LinkStyles;
 }
 
 export type LayoutMode = "concentric" | "progressive" | "hierarchical" | "radial-tree" | "cluster";
@@ -87,7 +113,7 @@ export interface GraphState {
 
 export interface GraphActions {
   setHoveredNode: (id: string | null) => void;
-  toggleNodeSelection: (id: string, multi?: boolean) => void;
+  toggleNodeSelection: (id: string, multi?: boolean, childIds?: string[]) => void;
   clearSelection: () => void;
   toggleNodeCollapse: (id: string) => void;
   expandAll: () => void;

@@ -18,7 +18,7 @@ export const useGraphStore = create<GraphStore>((set) => ({
     set({ hoveredNodeId: id });
   },
 
-  toggleNodeSelection: (id: string, multi?: boolean) => {
+  toggleNodeSelection: (id: string, multi?: boolean, childIds?: string[]) => {
     set((state) => {
       const newSelection = new Set(state.selectedNodeIds);
       if (multi) {
@@ -33,6 +33,12 @@ export const useGraphStore = create<GraphStore>((set) => ({
         } else {
           newSelection.clear();
           newSelection.add(id);
+          // Add direct children if provided
+          if (childIds) {
+            for (const childId of childIds) {
+              newSelection.add(childId);
+            }
+          }
         }
       }
       return { selectedNodeIds: newSelection };

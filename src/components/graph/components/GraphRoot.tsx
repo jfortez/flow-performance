@@ -70,6 +70,7 @@ interface GraphRootProps {
   simulationSettings?: SimulationSettings;
   defaultCollapsed?: boolean;
   allowNodeDrag?: boolean;
+  selectChildren?: boolean;
   children: ReactNode;
 }
 
@@ -83,6 +84,7 @@ export function GraphRoot({
   simulationSettings = {},
   defaultCollapsed = true,
   allowNodeDrag = true,
+  selectChildren = true,
   children,
 }: GraphRootProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -461,6 +463,7 @@ export function GraphRoot({
       showLevelLabels,
       showChildCount,
       allowNodeDrag,
+      selectChildren,
     }),
     [
       simulationRef,
@@ -475,6 +478,7 @@ export function GraphRoot({
       showLevelLabels,
       showChildCount,
       allowNodeDrag,
+      selectChildren,
     ],
   );
 

@@ -17,6 +17,7 @@ interface GraphEngineContextValue {
   showLevelLabels: boolean;
   showChildCount: boolean;
   allowNodeDrag: boolean;
+  selectChildren: boolean;
 }
 
 export const GraphEngineContext = createContext<GraphEngineContextValue | null>(null);

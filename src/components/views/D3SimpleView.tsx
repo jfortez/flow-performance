@@ -31,10 +31,12 @@ export const D3SimpleView = ({
   showChildCount: showChildCountProp = false,
   showTooltipOnHover = false,
 }: D3SimpleViewProps) => {
-  const [nodesState] = useState<CustomNode[]>(initialNodes);
-  const [edgesState] = useState<Edge[]>(initialEdges);
+  const [nodesState, setNodesState] = useState<CustomNode[]>(initialNodes);
+  const [edgesState, setEdgesState] = useState<Edge[]>(initialEdges);
   const [isOverviewOpen, setIsOverviewOpen] = useState(true);
   const [allowNodeDrag, setAllowNodeDrag] = useState(true);
+  const selectedNodeIds = useGraphStore((state) => state.selectedNodeIds);
+  const clearSelection = useGraphStore((state) => state.clearSelection);
 
   const searchResultsMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -52,8 +54,8 @@ export const D3SimpleView = ({
       return {
         id: node.id,
         label: node.data.label,
-        color: style?.background || "#E3F2FD",
-        borderColor: isMatch ? "#FFC107" : style?.border?.split(" ")[2] || "#1976D2",
+        color: style?.background || "#bc1234",
+        borderColor: isMatch ? "#0b09ae" : style?.border?.split(" ")[2] || "#1976D2",
         type: node.data.metadata.type,
         level: node.data.metadata.level,
         isMatch,
@@ -77,14 +79,91 @@ export const D3SimpleView = ({
   const dimensions = useGraphStore((state) => state.dimensions);
 
   const handleAddNode = useCallback(() => {
-    // Implementation would use graph store
-    console.log("Add node");
-  }, []);
+    // Get the first selected node to add a child to
+    const selectedId = Array.from(selectedNodeIds)[0];
+    if (!selectedId) {
+      alert("Please select a node first");
+      return;
+    }
+
+    const parentNode = nodesState.find(n => n.id === selectedId);
+    if (!parentNode) return;
+
+    const newId = `node-${Date.now()}`;
+    const newLevel = (parentNode.data.metadata.level ?? 0) + 1;
+    
+    const newNode: CustomNode = {
+      id: newId,
+      type: 'custom',
+      position: { x: 0, y: 0 },
+      data: {
+        label: `New Node ${newId.slice(-4)}`,
+        metadata: {
+          type: 'endpoint',
+          level: newLevel,
+          status: 'active',
+        },
+      },
+      style: {
+        background: '#E3F2FD',
+        border: '2px solid #1976D2',
+      },
+    };
+
+    const newEdge: Edge = {
+      id: `edge-${Date.now()}`,
+      source: selectedId,
+      target: newId,
+    };
+
+    setNodesState(prev => [...prev, newNode]);
+    setEdgesState(prev => [...prev, newEdge]);
+  }, [selectedNodeIds, nodesState]);
 
   const handleDeleteNode = useCallback(() => {
-    // Implementation would use graph store
-    console.log("Delete node");
-  }, []);
+    const selectedId = Array.from(selectedNodeIds)[0];
+    if (!selectedId) {
+      alert("Please select a node first");
+      return;
+    }
+
+    const nodeToDelete = nodesState.find(n => n.id === selectedId);
+    if (nodeToDelete?.data.metadata.level === 0) {
+      alert("Cannot delete the root node");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete "${nodeToDelete?.data.label}"?`)) {
+      return;
+    }
+
+    // Remove the node and any edges connected to it
+    setNodesState(prev => prev.filter(n => n.id !== selectedId));
+    setEdgesState(prev => prev.filter(e => e.source !== selectedId && e.target !== selectedId));
+    clearSelection();
+  }, [selectedNodeIds, nodesState, clearSelection]);
+
+  const handleEditNode = useCallback(() => {
+    const selectedId = Array.from(selectedNodeIds)[0];
+    if (!selectedId) {
+      alert("Please select a node first");
+      return;
+    }
+
+    const nodeToEdit = nodesState.find(n => n.id === selectedId);
+    if (!nodeToEdit) return;
+
+    const newLabel = prompt("Enter new label:", nodeToEdit.data.label);
+    if (newLabel === null || newLabel === nodeToEdit.data.label) return;
+
+    setNodesState(prev => 
+      prev.map(n => 
+        n.id === selectedId 
+          ? { ...n, data: { ...n.data, label: newLabel } }
+          : n
+      )
+    );
+  }, [selectedNodeIds, nodesState]);
 
   const onZoomFit = useCallback(() => {
     zoomFit(nodePositions, dimensions.width, dimensions.height);
@@ -154,7 +233,7 @@ export const D3SimpleView = ({
               <button onClick={handleAddNode} className={styles.nodeActionButton} title="Add Child">
                 +
               </button>
-              <button className={styles.nodeActionButton} title="Edit">
+              <button onClick={handleEditNode} className={styles.nodeActionButton} title="Edit">
                 ✎
               </button>
               {node.level !== undefined && node.level > 0 && (

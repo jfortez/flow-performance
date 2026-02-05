@@ -17,8 +17,10 @@ import {
   LINK_STROKE_DIMMED,
   LINK_STROKE_CONNECTED,
   LINK_STROKE_HOVERED,
+  LINK_STROKE_SELECTED,
   LINK_SHADOW_CONNECTED,
   LINK_SHADOW_HOVERED,
+  LINK_SHADOW_SELECTED,
   NODE_SHADOW_CONNECTED,
   NODE_SHADOW_LINK_CONNECTED,
   SHADOW_TRANSPARENT,
@@ -91,6 +93,7 @@ export function GraphCanvas() {
     showLevelLabels,
     showChildCount,
     allowNodeDrag,
+    selectChildren,
   } = useGraphEngine();
 
   const setHoveredNode = useGraphStore((state) => state.setHoveredNode);
@@ -187,6 +190,7 @@ export function GraphCanvas() {
       }
     }
 
+    // Get selected node IDs for link highlighting
     const selectedNodeIds = useGraphStore.getState().selectedNodeIds;
 
     for (const link of forceLinks) {
@@ -198,21 +202,36 @@ export function GraphCanvas() {
       const isLinkMatch = isLinkHovered && hoveredLink === link;
       const isConnected =
         isHovered && connectedNodeIds.has(source.id) && connectedNodeIds.has(target.id);
+      
+      // Check if link is connected to any selected node
+      const isSourceSelected = selectedNodeIds.has(source.id);
+      const isTargetSelected = selectedNodeIds.has(target.id);
+      const isLinkSelected = isSourceSelected || isTargetSelected;
 
       if (isLinkMatch) {
+        // Link hover has highest priority
         ctx.strokeStyle = LINK_STROKE_HOVERED;
         ctx.lineWidth = LINE_WIDTH_HEAVY / transform.k;
         ctx.shadowColor = LINK_SHADOW_HOVERED;
         ctx.shadowBlur = SHADOW_BLUR_LARGE / transform.k;
-      } else if (isHovered && !isConnected) {
-        ctx.strokeStyle = LINK_STROKE_DIMMED;
-        ctx.lineWidth = LINE_WIDTH_THIN / transform.k;
       } else if (isConnected) {
+        // Node hover connection
         ctx.strokeStyle = LINK_STROKE_CONNECTED;
         ctx.lineWidth = LINE_WIDTH_EXTRA_BOLD / transform.k;
         ctx.shadowColor = LINK_SHADOW_CONNECTED;
         ctx.shadowBlur = SHADOW_BLUR_DEFAULT / transform.k;
+      } else if (isLinkSelected) {
+        // Link connected to selected node - subtle green (like active button)
+        ctx.strokeStyle = LINK_STROKE_SELECTED;
+        ctx.lineWidth = LINE_WIDTH_EXTRA_BOLD / transform.k;
+        ctx.shadowColor = LINK_SHADOW_SELECTED;
+        ctx.shadowBlur = SHADOW_BLUR_DEFAULT / transform.k;
+      } else if (isHovered) {
+        // Dimmed when hovering unrelated nodes
+        ctx.strokeStyle = LINK_STROKE_DIMMED;
+        ctx.lineWidth = LINE_WIDTH_THIN / transform.k;
       } else {
+        // Default
         ctx.strokeStyle = LINK_STROKE_DEFAULT;
         ctx.lineWidth = LINE_WIDTH_MEDIUM / transform.k;
       }
@@ -222,7 +241,7 @@ export function GraphCanvas() {
       ctx.lineTo(target.x, target.y);
       ctx.stroke();
 
-      if (isLinkMatch || isConnected) {
+      if (isLinkMatch || isConnected || isLinkSelected) {
         ctx.shadowColor = SHADOW_TRANSPARENT;
         ctx.shadowBlur = 0;
       }
@@ -263,6 +282,7 @@ export function GraphCanvas() {
             : (node.borderColor ?? NODE_BORDER_DEFAULT);
       ctx.stroke();
 
+      // Selection ring (green) - always shown when selected, even when hovered
       if (isSelected) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, radius + 8 / transform.k, 0, Math.PI * 2);
@@ -271,9 +291,10 @@ export function GraphCanvas() {
         ctx.stroke();
       }
 
+      // Hover glow effect (yellow) - additive, shown around selection if present
       if (isNodeHovered || isConnected || isLinkConnected) {
         ctx.beginPath();
-        ctx.arc(node.x, node.y, radius + 5 / transform.k, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, radius + (isSelected ? 12 : 5) / transform.k, 0, Math.PI * 2);
         ctx.strokeStyle = isNodeHovered
           ? NODE_BORDER_HOVERED
           : isLinkConnected
@@ -660,7 +681,11 @@ export function GraphCanvas() {
         setHoveredNode(null);
 
         const multi = event.ctrlKey || event.metaKey;
-        toggleNodeSelection(clickedNode.id, multi);
+        // Get direct children if selectChildren is enabled and not in multi-select mode
+        const childIds = selectChildren && !multi && clickedNode.childIds
+          ? clickedNode.childIds.filter(id => visibleNodeIds.has(id))
+          : undefined;
+        toggleNodeSelection(clickedNode.id, multi, childIds);
       } else {
         clearSelection();
       }
@@ -674,6 +699,8 @@ export function GraphCanvas() {
       setHoveredNode,
       toggleNodeSelection,
       setIsDragging,
+      selectChildren,
+      visibleNodeIds,
     ],
   );
 
@@ -712,7 +739,7 @@ export function GraphCanvas() {
       draggedNodeRef.current = clickedNode;
       clickedNode.fx = clickedNode.x;
       clickedNode.fy = clickedNode.y;
-      simulationRef.current?.alpha(0.3).restart();
+      simulationRef.current?.alpha(0.02).restart();
     },
     [getNodeAtPosition, isClickOnExpandButton, setIsDragging, simulationRef, allowNodeDrag],
   );
@@ -749,7 +776,7 @@ export function GraphCanvas() {
           const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
           draggedNodeRef.current.fx = x - dragOffsetRef.current.x;
           draggedNodeRef.current.fy = y - dragOffsetRef.current.y;
-          simulationRef.current?.alpha(0.3).restart();
+          simulationRef.current?.alpha(0.02).restart();
           return;
         }
       }
@@ -838,7 +865,7 @@ export function GraphCanvas() {
   const handleMouseUp = useCallback(() => {
     if (draggedNodeRef.current) {
       draggedNodeRef.current = null;
-      simulationRef.current?.alpha(0.3).restart();
+      simulationRef.current?.alpha(0.02).restart();
     }
   }, [simulationRef]);
 
